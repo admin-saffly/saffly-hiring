@@ -734,8 +734,8 @@ const scoreChip=s=>s==null?'<span class="muted">—</span>':`<span class="pill $
 
 let VIEW={name:'',id:null,tab:'profile'};
 const NAV={
-  hr:[['dashboard','Dashboard'],['candidates','Candidates'],['interviews','Interviews'],['new','Register candidate'],['_','Configuration'],['questions','Question bank'],['settings','Scoring & positions'],['users','Users & access']],
-  interviewer:[['my','My interviews'],['candidates','My candidates']]
+  hr:[['dashboard','Dashboard'],['candidates','Candidates'],['interviews','Interviews'],['new','Register candidate'],['_','Configuration'],['questions','Question bank'],['settings','Scoring & positions'],['users','Users & access'],['_','Me'],['account','My account']],
+  interviewer:[['my','My interviews'],['candidates','My candidates'],['_','Me'],['account','My account']]
 };
 function go(name,id=null,tab='profile'){VIEW={name,id,tab};render();window.scrollTo(0,0)}
 function allowed(name){return NAV[role()].some(n=>n[0]===name)||['candidate','evaluate','pack'].includes(name)}
@@ -748,9 +748,10 @@ function renderNav(){
 function renderWho(){const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+(u.role==='hr'?'HR Administrator':'Interviewer')+'</small>'}
 function render(){
   if(!VIEW.name||!allowed(VIEW.name)) VIEW={name:NAV[role()][0][0],id:null,tab:'profile'};
+  if(DB.mustChange) VIEW={name:'account',id:null,tab:'profile'};
   renderNav(); renderWho();
-  const v={pack:vPack,dashboard:vDashboard,candidates:vCandidates,candidate:vCandidate,new:vNew,interviews:vInterviews,my:vMy,evaluate:vEvaluate,questions:vQuestions,settings:vSettings,users:vUsers,design:vDesign}[VIEW.name];
-  const EB={dashboard:'HR overview',candidates:role()==='management'?'Recruitment progress':'Talent pipeline',candidate:'Candidate file',pack:'New hire approval pack',new:'Candidate registration',interviews:'Interview schedule',my:'Interviewer workspace',evaluate:'Interview evaluation',questions:'Configuration',settings:'Configuration',users:'Access control',design:'Implementation proposal'}[VIEW.name]||'';
+  const v={pack:vPack,dashboard:vDashboard,candidates:vCandidates,candidate:vCandidate,new:vNew,interviews:vInterviews,my:vMy,evaluate:vEvaluate,questions:vQuestions,settings:vSettings,users:vUsers,design:vDesign,account:vAccount}[VIEW.name];
+  const EB={dashboard:'HR overview',candidates:role()==='management'?'Recruitment progress':'Talent pipeline',candidate:'Candidate file',pack:'New hire approval pack',new:'Candidate registration',interviews:'Interview schedule',my:'Interviewer workspace',evaluate:'Interview evaluation',questions:'Configuration',settings:'Configuration',users:'Access control',design:'Implementation proposal',account:'Your account'}[VIEW.name]||'';
   $('#app').innerHTML=v().replace('<div class="head"><div><h1>','<div class="head"><div><div class="eyebrow">'+EB+'</div><h1>')+'<div class="foot-note">SAFFLY EGYPT · HIRING &amp; EVALUATION SYSTEM · HR ONLY · CONFIDENTIAL</div>';
   after[VIEW.name]&&after[VIEW.name]();
 }
@@ -1449,7 +1450,7 @@ function vUsers(){
   const meId=me().id;
   const roleOpts=v=>[['hr','HR Administrator'],['interviewer','Interviewer / Hiring Manager']].map(([k,l])=>`<option value="${k}" ${v===k?'selected':''}>${l}</option>`).join('');
   return `<div class="head"><div><h1>Users &amp; access</h1><p>A person can sign in only if they are listed here and ticked Active. They sign in with their user name, e-mail or mobile and the password you set${DB.config.loginOtp!==false?', or with a one-time code sent to their e-mail':''}. Interviewers see only the interviews you assign to them. Changes apply at once: untick Active and that person is signed out on their next click.</p></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>User name</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Active</th></tr></thead><tbody>
+  <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>User name</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Active</th><th></th></tr></thead><tbody>
   ${DB.users.map(u=>{const self=u.id===meId,dis=self?'disabled title="You cannot change your own access. Ask another HR user."':'';
     return `<tr style="${u.active===false?'opacity:.55':''}"><td><input type="text" data-uf="${u.id}|name" value="${esc(u.name)}" aria-label="Name">${u.sample?'<div class="muted" style="font-size:11px">Sample user</div>':''}</td>
     <td><input type="text" data-uf="${u.id}|username" value="${esc(u.username||'')}" placeholder="e.g. sherif.kamal" aria-label="User name" autocapitalize="off"></td>
@@ -1457,8 +1458,9 @@ function vUsers(){
     <td><input type="text" data-uf="${u.id}|mobile" value="${esc(u.mobile||'')}" placeholder="01xxxxxxxxx" aria-label="Mobile" inputmode="tel" style="min-width:120px"></td>
     <td><input type="text" data-uf="${u.id}|title" value="${esc(u.title||'')}" aria-label="Title"></td>
     <td><select data-uf="${u.id}|role" aria-label="Role" ${dis}>${roleOpts(u.role)}</select></td>
-    <td style="white-space:nowrap">${u.hasPw?'<span class="pill p-good">Set</span>':'<span class="pill">Not set</span>'}</td>
-    <td><input type="checkbox" data-uf="${u.id}|active" ${u.active!==false?'checked':''} aria-label="Active" ${dis}></td></tr>`}).join('')}
+    <td style="white-space:nowrap">${u.hasPw?(u.pwTemp?'<span class="pill p-await">Temporary</span>':'<span class="pill p-good">Set</span>'):'<span class="pill">Not set</span>'}</td>
+    <td><input type="checkbox" data-uf="${u.id}|active" ${u.active!==false?'checked':''} aria-label="Active" ${dis}></td>
+    <td>${self?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`}).join('')}
   </tbody></table></div>
   <form class="panel" id="userForm" novalidate autocomplete="off"><h2>Add user</h2><div class="grid g4">
     <label class="field"><span>Name <i>*</i></span><input type="text" name="name"></label>
@@ -1472,7 +1474,7 @@ function vUsers(){
   </div><p class="muted" style="margin:10px 0 0;font-size:12.5px">Give at least one of user name, e-mail or mobile. Send the password to the person yourself (WhatsApp or in person). It is stored encrypted and cannot be shown again; you can only reset it.</p>
   <div style="margin-top:12px"><button class="btn pri" type="submit">Add user</button></div></form>
   <form class="panel" id="pwForm" novalidate autocomplete="off"><h2>Set or reset a password</h2><div class="grid g4">
-    <label class="field"><span>User</span><select name="id">${DB.users.filter(u=>u.active!==false).map(u=>`<option value="${u.id}">${esc(u.name)}${u.username?' ('+esc(u.username)+')':''}</option>`).join('')}</select></label>
+    <label class="field"><span>User</span><select name="id">${DB.users.filter(u=>u.active!==false&&u.id!==me().id).map(u=>`<option value="${u.id}">${esc(u.name)}${u.username?' ('+esc(u.username)+')':''}</option>`).join('')}</select></label>
     <label class="field"><span>New password</span><input type="text" name="password" autocomplete="new-password" placeholder="8+ letters and numbers"></label>
     <div style="display:flex;gap:8px;align-items:end"><button type="button" class="btn sm" data-act="gen-pw">Suggest</button><button class="btn pri" type="submit">Save password</button></div>
   </div></form>
@@ -1507,9 +1509,12 @@ after.users=()=>{
     SYNCING=true;busy(true);
     call('sync',diff()).then(d=>{setData(d);return pw?call('setPassword',{id,password:pw}):d}).then(d=>{setData(d);render();toast('User added — they can sign in now')})
       .catch(err=>{toast('Not saved: '+err.message);refresh()}).finally(()=>{SYNCING=false;busy(false)})});
+  document.querySelectorAll('[data-udel]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.udel;
+    if(Date.now()-(b._arm||0)>3000){b._arm=Date.now();b.textContent='Click again';setTimeout(()=>{b.textContent='Delete'},3000);return}
+    const u=DB.users.find(x=>x.id===id);DB.users=DB.users.filter(x=>x.id!==id);save();render();toast((u?u.name:'User')+' deleted')}));
   $('#pwForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);const pw=fd.get('password');
     if(!PW_OK(pw)){toast('Password: at least 8 characters with letters and numbers');return}
-    busy(true);call('setPassword',{id:fd.get('id'),password:pw}).then(d=>{setData(d);render();toast('Password saved. Send it to the person yourself.')}).catch(err=>toast(err.message)).finally(()=>busy(false))});
+    busy(true);call('setPassword',{id:fd.get('id'),password:pw}).then(d=>{setData(d);render();toast('Temporary password saved. Send it to the person; they choose their own at first sign-in.')}).catch(err=>toast(err.message)).finally(()=>busy(false))});
 };
 
 
@@ -1582,6 +1587,20 @@ document.addEventListener('change',e=>{
 });
 
 
+function vAccount(){const u=me(),forced=DB.mustChange;
+  return `<div class="head"><div><h1>My account</h1><p>${forced?'<b style="color:var(--bad)">HR gave you a temporary password. Choose your own password to continue.</b>':'Change your password here: 8 or more characters with letters and numbers.'}</p></div></div>
+  <div class="panel"><dl class="kv"><div><dt>Name</dt><dd>${esc(u.name)}</dd></div><div><dt>Role</dt><dd>${u.role==='hr'?'HR Administrator':'Interviewer'}</dd></div><div><dt>User name</dt><dd>${esc(u.username||'—')}</dd></div><div><dt>E-mail</dt><dd>${esc(u.email||'—')}</dd></div><div><dt>Mobile</dt><dd>${esc(u.mobile||'—')}</dd></div></dl>
+  <p class="muted" style="margin:10px 0 0;font-size:12.5px">You can sign in with your user name, e-mail, mobile or full name. To change these, ask HR.</p></div>
+  <form class="panel" id="accForm" novalidate autocomplete="off"><h2>Change my password</h2><div class="grid g3">
+    <label class="field"><span>Current password</span><input type="password" name="current" autocomplete="current-password"></label>
+    <label class="field"><span>New password</span><input type="password" name="pw1" autocomplete="new-password"></label>
+    <label class="field"><span>Repeat new password</span><input type="password" name="pw2" autocomplete="new-password"></label>
+  </div><div style="margin-top:12px"><button class="btn pri" type="submit">Save my password</button></div></form>`}
+after.account=()=>{$('#accForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target),a=fd.get('pw1'),b=fd.get('pw2');
+  if(!PW_OK(a)){toast('Password: at least 8 characters with letters and numbers');return} if(a!==b){toast('The two new passwords are not the same');return}
+  const btn=e.target.querySelector('button');btn.disabled=true;busy(true);
+  call('setPassword',{id:me().id,current:fd.get('current'),password:a}).then(d=>{setData(d);VIEW={name:'',id:null,tab:'profile'};render();toast('Your password is saved')})
+  .catch(err=>{toast(err.message);btn.disabled=false}).finally(()=>busy(false))})};
 function readB64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})}
 function smallLogo(file){return new Promise((res,rej)=>{const r=new FileReader();r.onerror=rej;r.onload=()=>{const img=new Image();img.onerror=rej;img.onload=()=>{
   const k=Math.min(1,160/Math.max(img.width,img.height));const cv=document.createElement('canvas');cv.width=Math.round(img.width*k);cv.height=Math.round(img.height*k);
