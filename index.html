@@ -585,7 +585,7 @@ function seed(){
     'SFE-2026-0007':{decision:'Do not hire',date:'2026-10-05',approvedBy:'Dina Fathy',notes:'Stopped after HR interview.'}
   };
   const config={method:'weighted',hrWeight:40,techWeight:60,passMark:3.5,strongMark:4.0,furtherMark:3.0};
-  return {entities,depts,positions,users,questions,candidates,comp:{},interviews,evaluations,decisions,config,currentUser:'u1'};
+  return {entities,depts,positions,users,questions,candidates,comp,interviews,evaluations,decisions,config,currentUser:'u1'};
 }
 function applicableQuestions(type,c,questions){
   return questions.filter(q=>q.active&&q.type===type&&(q.position==='All'||q.position===c.position)&&(!q.levels.length||q.levels.includes(c.level)))
@@ -627,10 +627,10 @@ function band(sc){const k=DB.config;if(sc==null)return {label:'Not scored yet',c
 
 
 let DB=null, SNAP=null, TOKEN=null, SYNCING=false, AGAIN=false;
-const COLLS=['users','entities','positions','questions','candidates','interviews','evaluations','decisions'];
-const KEYF={positions:'title',decisions:'candId'};
+const COLLS=['users','entities','positions','questions','candidates','interviews','evaluations','decisions','comp'];
+const KEYF={positions:'title',decisions:'candId',comp:'candId'};
 const canon=v=>{if(Array.isArray(v))return '['+v.map(canon).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canon(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)};
-function recordsOf(db,c){if(c==='decisions')return Object.entries(db.decisions||{}).map(([k,v])=>({...v,candId:k}));return db[c]||[]}
+function recordsOf(db,c){if(c==='decisions'||c==='comp')return Object.entries(db[c]||{}).map(([k,v])=>({...v,candId:k}));return db[c]||[]}
 function snapOf(db){const s={config:canon(db.config)};COLLS.forEach(c=>{const m={};recordsOf(db,c).forEach(r=>m[String(r[KEYF[c]||'id'])]=canon(r));s[c]=m});return s}
 function diff(){const out={colls:{}};let any=false;
   COLLS.forEach(c=>{const k=KEYF[c]||'id',old=SNAP[c]||{},seen=new Set(),up=[],ins=[];
@@ -748,11 +748,10 @@ function renderNav(){
 function renderWho(){const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+(u.role==='hr'?'HR Administrator':'Interviewer')+'</small>'}
 function render(){
   if(!VIEW.name||!allowed(VIEW.name)) VIEW={name:NAV[role()][0][0],id:null,tab:'profile'};
-  if(DB.mustChange) VIEW={name:'account',id:null,tab:'profile'};
   renderNav(); renderWho();
   const v={pack:vPack,dashboard:vDashboard,candidates:vCandidates,candidate:vCandidate,new:vNew,interviews:vInterviews,my:vMy,evaluate:vEvaluate,questions:vQuestions,settings:vSettings,users:vUsers,design:vDesign,account:vAccount}[VIEW.name];
   const EB={dashboard:'HR overview',candidates:role()==='management'?'Recruitment progress':'Talent pipeline',candidate:'Candidate file',pack:'New hire approval pack',new:'Candidate registration',interviews:'Interview schedule',my:'Interviewer workspace',evaluate:'Interview evaluation',questions:'Configuration',settings:'Configuration',users:'Access control',design:'Implementation proposal',account:'Your account'}[VIEW.name]||'';
-  $('#app').innerHTML=v().replace('<div class="head"><div><h1>','<div class="head"><div><div class="eyebrow">'+EB+'</div><h1>')+'<div class="foot-note">SAFFLY EGYPT · HIRING &amp; EVALUATION SYSTEM · HR ONLY · CONFIDENTIAL</div>';
+  $('#app').innerHTML=(DB.mustChange&&VIEW.name!=='account'&&VIEW.name!=='pack'?'<div class="lock-note no-print" style="background:var(--warn-soft)"><b>🔑</b><span>You are using a password that HR gave you. You can choose your own any time from <a href="#" data-nav="account" style="color:var(--sky);font-weight:700">My account</a>.</span></div>':'')+v().replace('<div class="head"><div><h1>','<div class="head"><div><div class="eyebrow">'+EB+'</div><h1>')+'<div class="foot-note">SAFFLY EGYPT · HIRING &amp; EVALUATION SYSTEM · HR ONLY · CONFIDENTIAL</div>';
   after[VIEW.name]&&after[VIEW.name]();
 }
 const after={};
@@ -789,7 +788,7 @@ function vDashboard(){
     return {u,n:mine.length,done:done.length,pend:mine.length-done.length,late:mine.filter(i=>!isDone(i)&&i.date<TODAY).length,avg:avg(sc)}}).filter(r=>r.n);
   const stackColors={'New':'#8fa9c6','HR interview':'#4f7fb0','Technical interview':'var(--brand)','Awaiting decision':'var(--warn)','Hired':'var(--green)','Not hired':'var(--bad)','On hold':'#d9a24a'};
   return `
-  <div class="head"><div><h1>Recruitment dashboard</h1><p>All entities · registrations from ${fdate(DF.from)} to ${fdate(DF.to)}. Salaries are not stored in this system.</p></div></div>
+  <div class="head"><div><h1>Recruitment dashboard</h1><p>All entities · registrations from ${fdate(DF.from)} to ${fdate(DF.to)}. Salaries are visible to HR only.</p></div></div>
   <div class="panel"><div class="filters">
     <label class="field"><span>Entity</span><select id="df-entity"><option value="">All entities</option>${opt(DB.entities.map(e=>({v:e.id,l:e.name})),DF.entity)}</select></label>
     <label class="field"><span>Department</span><select id="df-dept"><option value="">All departments</option>${opt(DB.depts,DF.dept)}</select></label>
@@ -872,7 +871,8 @@ function vCandidate(){
   const c=API.candidate(VIEW.id);
   if(!c) return `<div class="panel"><h2>Not available</h2><p class="muted">This candidate is not assigned to you, or does not exist.</p></div>`;
   const r=role(), e=ent(c.entity), s=candScores(c.id);
-  const tabs=[['profile','Profile'],['interviews','Interviews & feedback'],['decision','Result &amp; decision']];
+  const canPay=()=>role()==='hr'&&me().seeSalary!==false;
+  const tabs=[['profile','Profile'],...(canPay()?[['comp','Compensation 🔒']]:[]),['interviews','Interviews & feedback'],['decision','Result &amp; decision']];
   if(!tabs.some(t=>t[0]===VIEW.tab)) VIEW.tab='profile';
   let body='';
   if(VIEW.tab==='profile') body=tabProfile(c);
@@ -924,7 +924,7 @@ function tabProfile(c){
     <div class="panel"><h3>Experience at a glance</h3><dl class="kv" style="grid-template-columns:1fr 1fr"><div><dt>Years</dt><dd>${esc(c.years)}</dd></div><div><dt>English</dt><dd>${esc(c.english)}</dd></div><div><dt>Current employer</dt><dd>${esc(c.employer)}</dd></div><div><dt>Notice</dt><dd>${esc(c.notice)}</dd></div></dl></div>
   </div>
   <div class="panel"><h2>Professional qualifications</h2><div class="quals">${(c.qualifications.length?c.qualifications:['','','']).map(q=>{if(!q)return '<div class="blank">Not completed</div>';const [a,...b]=q.split(' — ');return `<div><b>${esc(a)}</b>${esc(b.join(' — '))}</div>`}).join('')}</div></div>
-  <div class="lock-note"><b>🔒</b><span>Salaries are not stored in this system. HR keeps them in a separate password-protected workbook (SAFfly_Compensation_HR_Only.xlsx).</span></div>`;
+  ${role()==='hr'&&me().seeSalary!==false?'<div class="lock-note"><b>🔒</b><span>Salary details are in the <b>Compensation</b> tab. Only HR Administrators with the Salaries permission can see them; interviewers never receive them.</span></div>':''}`;
 }
 function tabComp(c){
   let k; try{k=API.compensation(c.id)}catch(e){return `<div class="panel err">${esc(e.message)}</div>`}
@@ -934,7 +934,7 @@ function tabComp(c){
   const cr=k.gradeMid&&total?total/k.gradeMid*100:null;
   const inBand=k.gradeMin&&total?total>=k.gradeMin:null;
   const al=[...(k.allowances||[])];while(al.length<3)al.push({name:'',amount:''});
-  return `<div class="lock-note"><b>🔒</b><span>Confidential. This tab exists only for HR Administrators. In production it reads a separate SharePoint list that other roles have no permission on, so the data cannot leak through hidden fields, exports or the API.</span></div>
+  return `<div class="lock-note"><b>🔒</b><span>Confidential. Only HR Administrators with the Salaries permission (Users &amp; access) see this tab. The server never sends salary data to interviewers, and the Google Sheet that stores it is not shared with anyone.</span></div>
   <form class="panel" id="compForm">
     <div class="panel-head"><h2>Fixed monthly compensation</h2><span class="tag">${esc(k.currency)} · gross, before tax &amp; social contributions</span></div>
     <div class="grid g4">
@@ -1098,7 +1098,7 @@ function vPack(){
     <h3 class="sl-h">Key strengths</h3><div class="sl-str">${st.map(x=>`<div>${x?esc(x):blank('—')}</div>`).join('')}</div>
     <h3 class="sl-h">Professional qualifications</h3><div class="quals">${ql.map(q=>{if(!q)return '<div class="blank">Not completed</div>';const [a,...b]=q.split(' — ');return `<div><b>${esc(a)}</b>${esc(b.join(' — '))}</div>`}).join('')}</div>
     ${foot()}</section>`;
-  if(false){
+  if(role()==='hr'&&me().seeSalary!==false&&DB.comp[c.id]&&(DB.comp[c.id].basic||DB.comp[c.id].current||DB.comp[c.id].expected)){
     const k=DB.comp[c.id]||{allowances:[],currency:e.currency,payments:12};
     const al=(k.allowances||[]).filter(a=>a.name);const total=(Number(k.basic)||0)+sum(al.map(a=>Number(a.amount)||0));
     const cr=k.gradeMid&&total?total/k.gradeMid*100:null;const pay=k.payments||12;
@@ -1123,7 +1123,7 @@ function vPack(){
         <div class="lock-note"><span><b>Variable pay.</b> Short- and long-term incentives sit outside fixed cash and follow the Green Sky Reward Framework.</span></div></div></div>
       ${foot()}</section>`;
   } else {
-    html+=`<section class="slide slim">${head('02','Fixed monthly compensation')}<div class="lock-note"><b>🔒</b><span>Salaries are not stored in this system. HR adds this page from the password-protected salary workbook: open <b>SAFfly_Compensation_HR_Only.xlsx</b> → sheet <b>Offer Page</b> → choose the Candidate ID → print / save as PDF.</span></div>${foot()}</section>`;
+    html+=`<section class="slide slim">${head('02','Fixed monthly compensation')}<div class="lock-note"><b>🔒</b><span>No compensation recorded yet. HR fills it in the candidate's <b>Compensation</b> tab and this page fills itself.</span></div>${foot()}</section>`;
   }
   evs.forEach(ev=>{
     const u=DB.users.find(x=>x.id===ev.interviewerId)||{};const iv=DB.interviews.find(i=>i.id===ev.interviewId)||{};const sc=evalScore(ev);
@@ -1277,7 +1277,7 @@ function vEvaluate(){
       ${iv.type==='HR'&&role()==='hr'?(()=>{const k=DB.comp[c.id]||{};return `<fieldset style="border-color:var(--sky)"><legend>HR details — HR only</legend><div class="grid g3">
         <label class="field"><span>Notice period</span><select name="hd_notice">${['Immediate','2 weeks','1 month','2 months','3 months'].map(x=>`<option ${c.notice===x?'selected':''}>${x}</option>`).join('')}</select></label>
         </div>
-        <p class="muted" style="margin:8px 0 0;font-size:12.5px">Current and expected package go in the password-protected salary workbook, not in this system.</p></fieldset>`})():''}
+        <p class="muted" style="margin:8px 0 0;font-size:12.5px">Current and expected package go in the candidate's Compensation tab (HR only).</p></fieldset>`})():''}
       ${comps.map(cp=>`<div class="panel"><div class="panel-head"><h2>${esc(cp)}</h2><span class="muted" style="font-size:12.5px">weight ${sum(qs.filter(q=>(q.grp||q.comp)===cp).map(q=>q.weight))}</span></div>
         ${qs.map((q,i)=>(q.grp||q.comp)!==cp?'':`<div class="q"><div><div class="qc">${esc(q.comp)}</div><div class="qt">${esc(q.text)}</div><div class="qm"><span class="mono">${q.qid}</span> · weight ${q.weight}</div>
           ${(q.listen||[]).length?`<div class="listen"><b>Listen for</b><ul>${q.listen.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></div>`:''}</div>
@@ -1450,7 +1450,7 @@ function vUsers(){
   const meId=me().id;
   const roleOpts=v=>[['hr','HR Administrator'],['interviewer','Interviewer / Hiring Manager']].map(([k,l])=>`<option value="${k}" ${v===k?'selected':''}>${l}</option>`).join('');
   return `<div class="head"><div><h1>Users &amp; access</h1><p>A person can sign in only if they are listed here and ticked Active. They sign in with their user name, e-mail or mobile and the password you set${DB.config.loginOtp!==false?', or with a one-time code sent to their e-mail':''}. Interviewers see only the interviews you assign to them. Changes apply at once: untick Active and that person is signed out on their next click.</p></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>User name</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Active</th><th></th></tr></thead><tbody>
+  <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>User name</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Salaries</th><th>Active</th><th></th></tr></thead><tbody>
   ${DB.users.map(u=>{const self=u.id===meId,dis=self?'disabled title="You cannot change your own access. Ask another HR user."':'';
     return `<tr style="${u.active===false?'opacity:.55':''}"><td><input type="text" data-uf="${u.id}|name" value="${esc(u.name)}" aria-label="Name">${u.sample?'<div class="muted" style="font-size:11px">Sample user</div>':''}</td>
     <td><input type="text" data-uf="${u.id}|username" value="${esc(u.username||'')}" placeholder="e.g. sherif.kamal" aria-label="User name" autocapitalize="off"></td>
@@ -1459,6 +1459,7 @@ function vUsers(){
     <td><input type="text" data-uf="${u.id}|title" value="${esc(u.title||'')}" aria-label="Title"></td>
     <td><select data-uf="${u.id}|role" aria-label="Role" ${dis}>${roleOpts(u.role)}</select></td>
     <td style="white-space:nowrap">${u.hasPw?(u.pwTemp?'<span class="pill p-await">Temporary</span>':'<span class="pill p-good">Set</span>'):'<span class="pill">Not set</span>'}</td>
+    <td>${u.role==='hr'?`<input type="checkbox" data-uf="${u.id}|seeSalary" ${u.seeSalary!==false?'checked':''} aria-label="Can see salaries" ${dis}>`:'<span class="muted">—</span>'}</td>
     <td><input type="checkbox" data-uf="${u.id}|active" ${u.active!==false?'checked':''} aria-label="Active" ${dis}></td>
     <td>${self?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`}).join('')}
   </tbody></table></div>
@@ -1479,7 +1480,7 @@ function vUsers(){
     <div style="display:flex;gap:8px;align-items:end"><button type="button" class="btn sm" data-act="gen-pw">Suggest</button><button class="btn pri" type="submit">Save password</button></div>
   </div></form>
   <div class="panel"><h2>Permission matrix</h2><div class="tbl-wrap"><table class="matrix"><thead><tr><th>Capability</th><th>HR Admin</th><th>Interviewer</th></tr></thead><tbody>
-  ${[['Register & edit candidates',1,0],['View candidate profile and CV',1,'Assigned only'],['Schedule interviews',1,0],['Submit own evaluation',1,1],['View HR interview feedback',1,'Assigned only'],['View other technical feedback',1,'After own submit'],['Record final decision',1,0],['Dashboard',1,0],['Manage questions, scoring, users, passwords',1,0],['Open the Google Sheet','Owner only','No'],['Salaries','In protected workbook','No']]
+  ${[['Register & edit candidates',1,0],['View candidate profile and CV',1,'Assigned only'],['Schedule interviews',1,0],['Submit own evaluation',1,1],['View HR interview feedback',1,'Assigned only'],['View other technical feedback',1,'After own submit'],['Record final decision',1,0],['Dashboard',1,0],['Manage questions, scoring, users, passwords',1,0],['Open the Google Sheet','Owner only','No'],['Salaries (Compensation tab)','If ticked in Salaries',0]]
     .map(([l,...v])=>`<tr><td>${l}</td>${v.map(x=>x===1?'<td class="yes">✓</td>':x===0?'<td class="no">✕</td>':`<td style="font-size:12.5px">${x}</td>`).join('')}</tr>`).join('')}
   </tbody></table></div></div>`;
 }
@@ -1588,7 +1589,7 @@ document.addEventListener('change',e=>{
 
 
 function vAccount(){const u=me(),forced=DB.mustChange;
-  return `<div class="head"><div><h1>My account</h1><p>${forced?'<b style="color:var(--bad)">HR gave you a temporary password. Choose your own password to continue.</b>':'Change your password here: 8 or more characters with letters and numbers.'}</p></div></div>
+  return `<div class="head"><div><h1>My account</h1><p>${forced?'<b style="color:var(--warn)">You are using a password that HR gave you. We recommend choosing your own.</b>':'Change your password here: 8 or more characters with letters and numbers.'}</p></div></div>
   <div class="panel"><dl class="kv"><div><dt>Name</dt><dd>${esc(u.name)}</dd></div><div><dt>Role</dt><dd>${u.role==='hr'?'HR Administrator':'Interviewer'}</dd></div><div><dt>User name</dt><dd>${esc(u.username||'—')}</dd></div><div><dt>E-mail</dt><dd>${esc(u.email||'—')}</dd></div><div><dt>Mobile</dt><dd>${esc(u.mobile||'—')}</dd></div></dl>
   <p class="muted" style="margin:10px 0 0;font-size:12.5px">You can sign in with your user name, e-mail, mobile or full name. To change these, ask HR.</p></div>
   <form class="panel" id="accForm" novalidate autocomplete="off"><h2>Change my password</h2><div class="grid g3">
@@ -1628,11 +1629,12 @@ function loadSample(){
   s.interviews.forEach(i=>DB.interviews.push({...i,id:'DEMO-'+i.id,candId:cid(i.candId),interviewerId:map[i.interviewerId],sample:true}));
   s.evaluations.forEach(e=>DB.evaluations.push({...e,id:'DEMO-'+e.id,interviewId:'DEMO-'+e.interviewId,candId:cid(e.candId),interviewerId:map[e.interviewerId],sample:true}));
   Object.entries(s.decisions).forEach(([k,v])=>{DB.decisions[cid(k)]={...v,approvedBy:me().name,sample:true}});
+  Object.entries(s.comp||{}).forEach(([k,v])=>{DB.comp[cid(k)]={...v,sample:true}});
   save(); render(); toast('Sample data loaded — 12 candidates');
 }
 function removeSample(){
   DB.evaluations=DB.evaluations.filter(x=>!x.sample);DB.interviews=DB.interviews.filter(x=>!x.sample);DB.candidates=DB.candidates.filter(x=>!x.sample);
-  Object.keys(DB.decisions).forEach(k=>{if(DB.decisions[k].sample)delete DB.decisions[k]});DB.users=DB.users.filter(u=>!u.sample);
+  Object.keys(DB.decisions).forEach(k=>{if(DB.decisions[k].sample)delete DB.decisions[k]});Object.keys(DB.comp).forEach(k=>{if(DB.comp[k].sample)delete DB.comp[k]});DB.users=DB.users.filter(u=>!u.sample);
   save(); render(); toast('Sample data removed');
 }
 
