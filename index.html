@@ -1030,7 +1030,7 @@ function tabInterviews(c){
       <label class="field"><span>Type</span><select name="type"><option>HR</option>${hrOk?'<option>Technical</option>':''}</select></label>
       <label class="field"><span>Interviewer</span><select name="interviewer">${DB.users.filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.name)} — ${esc(x.title)}</option>`).join('')}</select></label>
       <label class="field"><span>Date</span><input type="date" name="date" value="${TODAY}" required></label>
-      <label class="field"><span>Format</span><select name="format"><option>In person</option><option>Video</option></select></label>
+      <label class="field"><span>Format</span><select name="format"><option>In person</option><option>Video</option><option>Phone</option></select></label>
     </div><div style="margin-top:12px"><button class="btn pri" type="submit">Schedule</button></div>
     <p class="muted" style="margin:8px 0 0;font-size:12.5px">Add one row per interviewer. Then let the interviewer know: they sign in with their own username and find it under My interviews.${hrOk?'':' The technical interview can be scheduled once the candidate passes HR.'} You can change a date any time from the table above.</p></form>`:'';
   return section('HR')+section('Technical')+sched;
@@ -1201,22 +1201,40 @@ function vNew(){
       <label class="field"><span>CV attachment ${c?'':'<i>*</i>'} · PDF, DOC or DOCX, up to 5 MB</span><input type="file" name="cv" accept=".pdf,.doc,.docx">${c?`<small class="muted">Current: ${esc(c.cv)}</small>`:''}</label>
       <label class="field"><span>Or paste a CV link</span><input type="text" name="cvlink" placeholder="Paste the CV link" value="${c&&c.cvLink?esc(c.cvLink):''}"></label>
     </div></fieldset>
-    <fieldset><legend>Profile summary (from the CV and recruiter's report)</legend>
+    ${c?'':`<fieldset style="border-color:var(--sky)"><legend>HR interview</legend>
+      <div class="choice" style="flex-wrap:wrap">
+        <label><input type="radio" name="hrmode" value="now" checked> I will do the HR interview now</label>
+        <label><input type="radio" name="hrmode" value="assign"> Assign it to another HR interviewer</label>
+        <label><input type="radio" name="hrmode" value="later"> Later</label>
+      </div>
+      <div class="grid g3" id="hrAssign" style="margin-top:12px" hidden>
+        <label class="field"><span>HR interviewer</span><select name="hr_iv">${DB.users.filter(x=>x.active!==false&&x.id!==me().id).map(x=>`<option value="${x.id}">${esc(x.name)} · ${esc(roleLabel(x))}</option>`).join('')}</select></label>
+        <label class="field"><span>Date</span><input type="date" name="hr_date" value="${TODAY}"></label>
+        <label class="field"><span>Format</span><select name="hr_format"><option>In person</option><option>Video</option><option>Phone</option></select></label>
+      </div>
+      <p class="muted" id="hrHint" style="margin:10px 0 0;font-size:12.5px">After saving, the HR interview questions open right away on the same screen.</p>
+    </fieldset>`}
+    <details class="panel" style="padding:0 16px"><summary style="cursor:pointer;padding:12px 0;font-weight:700;color:var(--brand)">Profile summary (optional · for the new hire pack)</summary>
+    <fieldset style="border:0;padding:0 0 14px;margin:0"><legend hidden>Profile summary</legend>
       <label class="field"><span>Executive summary</span><textarea name="summary" placeholder="Current role, years of experience, career progression and key employers, in 2–3 lines.">${v('summary')}</textarea></label>
       <div class="grid g3" style="margin-top:12px">
         <div class="field"><span>Selected experience highlights (5)</span>${multi('hl',5,c?.highlights)}</div>
         <div class="field"><span>Key strengths (6)</span>${multi('st',6,c?.strengths)}</div>
         <div class="field"><span>Qualifications &amp; certifications</span>${multi('ql',6,c?.qualifications)}</div>
       </div>
-    </fieldset>
+    </fieldset></details>
     <div id="formErr" class="err" hidden></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="submit">${c?'Save changes':'Register candidate'}</button><button class="btn" type="button" data-act="cancel-edit">Cancel</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="submit" id="candSubmit">${c?'Save changes':'Save &amp; start HR interview'}</button><button class="btn" type="button" data-act="cancel-edit">Cancel</button></div>
   </form>`;
 }
 after.new=()=>{
   const f=$('#candForm');
   const sync=()=>{const p=DB.positions.find(p=>p.title.toLowerCase()===f.position.value.trim().toLowerCase());if(p&&!f.dept.value.trim())f.dept.value=p.dept};
   f.position.addEventListener('change',sync);
+  const modeUi=()=>{const m=(f.querySelector('[name=hrmode]:checked')||{}).value;if(!m)return;$('#hrAssign').hidden=m!=='assign';
+    $('#candSubmit').textContent=m==='now'?'Save & start HR interview':m==='assign'?'Save & assign HR interview':'Register candidate';
+    $('#hrHint').textContent=m==='now'?'After saving, the HR interview questions open right away on the same screen.':m==='assign'?'The interview appears in that person’s My interviews. Let them know.':'You can schedule the HR interview later from the candidate page.'};
+  f.querySelectorAll('[name=hrmode]').forEach(x=>x.addEventListener('change',modeUi));modeUi();
   f.addEventListener('submit',e=>{
     e.preventDefault(); const fd=new FormData(f); const errs=[];
     if(!fd.get('name').trim()) errs.push('Full name');
@@ -1238,7 +1256,10 @@ after.new=()=>{
       if(!DB.positions.some(p=>p.title.toLowerCase()===data.position.toLowerCase()))DB.positions.push({title:data.position,dept:data.dept});
       if(EDIT){Object.assign(DB.candidates.find(x=>x.id===EDIT),data,up||{})}
       else DB.candidates.push({id,...data,cv:'(link)',email:'',...(up||{})});
-      save(); const wasEdit=EDIT; EDIT=null; go('candidate',id); toast(wasEdit?'Candidate updated':'Candidate registered as '+id)};
+      const mode=EDIT?'':(fd.get('hrmode')||'later');let ivId=null;
+      if(mode==='now'||mode==='assign'){ivId='IV'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+        DB.interviews.push({id:ivId,candId:id,type:'HR',interviewerId:mode==='now'?me().id:fd.get('hr_iv'),date:mode==='now'?TODAY:(fd.get('hr_date')||TODAY),format:mode==='now'?'In person':fd.get('hr_format')})}
+      save(); const wasEdit=EDIT; EDIT=null; if(mode==='now')go('evaluate',ivId);else go('candidate',id,mode==='assign'?'interviews':'profile'); toast(wasEdit?'Candidate updated':'Candidate registered as '+id)};
     if(!file){finish();return}
     const btn=f.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Uploading CV…';
     readB64(file).then(b64=>call('uploadCv',{candId:id,name:file.name,mime:file.type,data:b64})).then(r=>finish({cv:r.name,cvFile:r.id}))
@@ -1279,7 +1300,7 @@ function vEvaluate(){
   const comps=[...new Set(qs.map(q=>q.grp||q.comp))];
   const d=draft||{};
   const ch=(name,opts,val)=>`<div class="choice">${opts.map(o=>`<label><input type="radio" name="${name}" value="${o}" ${val===o?'checked':''}> ${o}</label>`).join('')}</div>`;
-  return `<div><button class="btn ghost sm" type="button" data-open="${c.id}" data-tabto="interviews">← Back to ${esc(c.name)}</button></div>
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn ghost sm" type="button" data-open="${c.id}" data-tabto="interviews">← Back to ${esc(c.name)}</button>${c.cvFile?`<button class="btn sm" type="button" data-cv="${c.id}">Download CV</button>`:''}${c.cvLink?`<a class="btn sm" href="${esc(c.cvLink)}" target="_blank" rel="noopener">Open CV link</a>`:''}</div>
   <div class="head"><div><h1>${iv.type} interview evaluation</h1><p>${esc(c.name)} · ${esc(c.position)} (${esc(c.level)}) · ${esc(ent(c.entity).name)} — ${fdate(iv.date)}, ${esc(iv.format)}</p></div><span class="tag ${iv.type==='HR'?'hr':'tech'}">${iv.type}</span></div>
   <form id="evalForm" class="eval-layout" novalidate>
     <div class="grid" style="gap:18px">
