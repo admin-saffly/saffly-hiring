@@ -955,34 +955,40 @@ function tabComp(c){
   const cr=k.gradeMid&&total?total/k.gradeMid*100:null;
   const inBand=k.gradeMin&&total?total>=k.gradeMin:null;
   const al=[...(k.allowances||[])];while(al.length<3)al.push({name:'',amount:''});
-  return `<div class="lock-note"><b>🔒</b><span>Confidential. Only HR Administrators with the Salaries permission (Users &amp; access) see this tab. The server never sends salary data to interviewers, and the Google Sheet that stores it is not shared with anyone.</span></div>
+  return `<div class="lock-note"><b>🔒</b><span>Confidential · only people with the Salaries permission see this tab.</span></div>
   <form class="panel" id="compForm">
-    <div class="panel-head"><h2>Fixed monthly compensation</h2><span class="tag">${esc(k.currency)} · gross, before tax &amp; social contributions</span></div>
-    <div class="grid g4">
-      <label class="field"><span>Current package (monthly)</span><input type="number" name="current" value="${esc(k.current)}"></label>
-      <label class="field"><span>Expected package (monthly)</span><input type="number" name="expected" value="${esc(k.expected)}"></label>
-      <label class="field"><span>Grade</span><input type="text" name="grade" value="${esc(k.grade)}"></label>
-      <label class="field"><span>Grade name</span><input type="text" name="gradeName" value="${esc(k.gradeName)}"></label>
-      <label class="field"><span>Offered basic salary</span><input type="number" name="basic" value="${esc(k.basic)}"></label>
-      <label class="field"><span>Grade minimum</span><input type="number" name="gradeMin" value="${esc(k.gradeMin)}"></label>
-      <label class="field"><span>Grade midpoint (P50)</span><input type="number" name="gradeMid" value="${esc(k.gradeMid)}"></label>
-      <label class="field"><span>Payments per year</span><input type="number" name="payments" value="${esc(k.payments)}"></label>
+    <div class="panel-head"><h2>Package</h2><span class="tag">${esc(k.currency)} · monthly · gross</span></div>
+    <div class="grid g3">
+      <label class="field"><span>Current package</span><input type="number" min="0" name="current" value="${esc(k.current)}" placeholder="What they earn now"></label>
+      <label class="field"><span>Expected package</span><input type="number" min="0" name="expected" value="${esc(k.expected)}" placeholder="What they ask for"></label>
+      <label class="field"><span>Offered basic salary</span><input type="number" min="0" name="basic" value="${esc(k.basic)}" placeholder="What we offer"></label>
     </div>
-    <fieldset style="margin-top:14px"><legend>Fixed allowances</legend><div class="grid g2">
-      ${al.map((a,i)=>`<label class="field"><span>Allowance ${i+1}</span><input type="text" name="an${i}" value="${esc(a.name)}" placeholder="e.g. Housing, Transport"></label><label class="field"><span>Monthly amount</span><input type="number" name="aa${i}" value="${esc(a.amount)}"></label>`).join('')}
-    </div></fieldset>
-    <div class="grid g3" style="margin-top:14px">
-      <label class="field"><span>Why the role sits in this grade</span><textarea name="gradeReason">${esc(k.gradeReason)}</textarea></label>
-      <label class="field"><span>Statutory bonus / allowance (as per local law)</span><textarea name="statutory" placeholder="e.g. annual increment, bonus as per Labour Law">${esc(k.statutory||'')}</textarea></label>
-      <label class="field"><span>Payment terms</span><textarea name="paymentTerms">${esc(k.paymentTerms||'Paid monthly in '+k.currency+', '+(k.payments||12)+' payments a year.')}</textarea></label>
+    <h3 style="margin:18px 0 8px">Allowances <span class="muted" style="font-weight:500;font-size:12.5px">· optional, monthly</span></h3>
+    <div class="grid g3">
+      ${al.map((a,i)=>`<div style="display:flex;gap:6px"><input type="text" name="an${i}" value="${esc(a.name)}" placeholder="e.g. ${['Housing','Transport','Phone'][i]}" aria-label="Allowance ${i+1} name" style="flex:1.3;min-width:0"><input type="number" min="0" name="aa${i}" value="${esc(a.amount)}" placeholder="Amount" aria-label="Allowance ${i+1} amount" style="flex:1;min-width:0"></div>`).join('')}
     </div>
-    <div class="grid g4" style="margin-top:16px">
-      <div class="kpi"><span>Total fixed cash / month</span><b>${money(total,k.currency)}</b></div>
-      <div class="kpi"><span>Annual fixed cash</span><b>${money(total*(k.payments||12),k.currency)}</b><small>${money(total,'')} × ${k.payments||12}</small></div>
-      <div class="kpi"><span>Compa-ratio</span><b style="color:${cr==null?'inherit':cr>100?'var(--warn)':'var(--good)'}">${cr==null?'—':cr.toFixed(0)+'%'}</b><small>offer ÷ grade midpoint</small></div>
-      <div class="kpi"><span>Versus expected</span><b>${k.expected&&total?((total/k.expected-1)*100).toFixed(0)+'%':'—'}</b><small>${inBand===false?'<span style="color:var(--bad)">Below grade minimum</span>':cr>100?'<span style="color:var(--warn)">Above midpoint — DoA approval</span>':'Within approved band'}</small></div>
+    <div class="grid g3" style="margin-top:16px">
+      <div class="kpi hero"><span>Total per month</span><b>${money(total,k.currency)}</b><small>basic + allowances</small></div>
+      <div class="kpi"><span>Total per year</span><b>${money(total*(k.payments||12),k.currency)}</b><small>× ${k.payments||12} payments</small></div>
+      <div class="kpi"><span>Offer vs expected</span><b style="color:${k.expected&&total?(total>=k.expected?'var(--good)':'var(--warn)'):'inherit'}">${k.expected&&total?((total/k.expected-1)*100>0?'+':'')+((total/k.expected-1)*100).toFixed(0)+'%':'—'}</b><small>${k.expected&&total?(total>=k.expected?'meets what they ask':'below what they ask'):'fill expected and offer'}</small></div>
     </div>
-    <div style="margin-top:14px;display:flex;gap:8px"><button class="btn pri" type="submit">Save compensation</button></div>
+    <details style="margin-top:16px;border-top:1px solid var(--line);padding-top:10px" ${(k.grade||k.gradeMin||k.gradeMid||k.gradeReason||k.statutory||k.paymentTerms||(k.payments&&k.payments!=12))?'open':''}>
+      <summary style="cursor:pointer;font-weight:700;color:var(--brand)">More details · grade, payments per year, terms (optional)</summary>
+      <div class="grid g3" style="margin-top:12px">
+        <label class="field"><span>Grade</span><input type="text" name="grade" value="${esc(k.grade)}" placeholder="e.g. G5"></label>
+        <label class="field"><span>Grade name</span><input type="text" name="gradeName" value="${esc(k.gradeName)}" placeholder="e.g. Senior Specialist"></label>
+        <label class="field"><span>Payments per year</span><input type="number" min="12" max="16" name="payments" value="${esc(k.payments||12)}"></label>
+        <label class="field"><span>Grade minimum</span><input type="number" min="0" name="gradeMin" value="${esc(k.gradeMin)}"></label>
+        <label class="field"><span>Grade midpoint</span><input type="number" min="0" name="gradeMid" value="${esc(k.gradeMid)}"></label>
+        <div class="kpi" style="margin:0"><span>Offer vs grade midpoint</span><b style="color:${cr==null?'inherit':cr>100?'var(--warn)':'var(--good)'}">${cr==null?'—':cr.toFixed(0)+'%'}</b><small>${inBand===false?'<span style="color:var(--bad)">Below grade minimum</span>':cr>100?'<span style="color:var(--warn)">Above midpoint · needs approval</span>':cr==null?'fill grade midpoint':'within the grade'}</small></div>
+      </div>
+      <div class="grid g3" style="margin-top:12px">
+        <label class="field"><span>Why this grade</span><textarea name="gradeReason">${esc(k.gradeReason)}</textarea></label>
+        <label class="field"><span>Statutory bonus / allowance</span><textarea name="statutory" placeholder="e.g. annual increment as per Labour Law">${esc(k.statutory||'')}</textarea></label>
+        <label class="field"><span>Payment terms</span><textarea name="paymentTerms" placeholder="e.g. paid monthly by bank transfer">${esc(k.paymentTerms||'')}</textarea></label>
+      </div>
+    </details>
+    <div style="margin-top:14px;display:flex;gap:8px"><button class="btn pri" type="submit">Save package</button></div>
   </form>`;
 }
 function evCard(ev,c){
@@ -1083,7 +1089,7 @@ after.candidate=()=>{
     ['current','expected','basic','gradeMin','gradeMid','payments'].forEach(f=>k[f]=fd.get(f)===''?'':Number(fd.get(f)));
     ['grade','gradeName','gradeReason','statutory','paymentTerms'].forEach(f=>k[f]=fd.get(f));
     k.allowances=[0,1,2].map(i=>({name:fd.get('an'+i),amount:Number(fd.get('aa'+i))||0})).filter(a=>a.name);
-    DB.comp[VIEW.id]=k;save();render();toast('Compensation saved')})}
+    DB.comp[VIEW.id]=k;save();render();toast('Package saved')})}
   document.querySelectorAll('[data-ivdate]').forEach(el=>el.addEventListener('change',e=>{const iv=DB.interviews.find(i=>i.id===e.target.dataset.ivdate);if(!iv||!e.target.value)return;iv.date=e.target.value;save();toast('Interview date updated')}));
   const sf=$('#schedForm');
   if(sf){sf.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(sf);
@@ -1306,7 +1312,7 @@ function vEvaluate(){
     <div class="grid" style="gap:18px">
       <div class="panel"><dl class="kv"><div><dt>Interviewer</dt><dd>${esc(u.name)}</dd></div><div><dt>Position</dt><dd>${esc(u.title)}</dd></div><div><dt>Interview date</dt><dd>${fdate(iv.date)}</dd></div><div><dt>Format</dt><dd>${esc(iv.format)}</dd></div></dl>
         <p class="muted" style="margin:12px 0 0;font-size:12.5px">${qs.length} questions loaded from the question bank for <b>${iv.type} · ${esc(c.position)} · ${esc(c.level)}</b>. Rating scale: 1 Poor · 2 Below expectations · 3 Meets expectations · 4 Strong · 5 Outstanding.</p></div>
-      <div class="panel guide"><h2>How to run and rate this interview</h2>
+      <details class="panel guide"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">📘 Interview guide · how to run and rate (click to open)</summary><div style="margin-top:14px">
         <div class="grid g2">
           <div><h3 style="border:0;padding:0;margin-bottom:8px">Interview flow · about 45 minutes</h3><ol class="steps">
             <li><b>Open (5 min)</b> Introduce yourself, the role and the format.</li>
@@ -1316,7 +1322,7 @@ function vEvaluate(){
             <li><b>Rate straight after</b> Rate each question, then write the recommendation while it is fresh.</li></ol></div>
           <div><h3 style="border:0;padding:0;margin-bottom:8px">Turning the answer into a rating</h3>
             <table class="mini rubric"><tbody>${RUBRIC.map(([n,l,d])=>`<tr><td class="num"><b>${n}</b></td><td><b>${l}</b></td><td>${d}</td></tr>`).join('')}</tbody></table></div>
-        </div></div>
+        </div></div></details>
       ${iv.type==='HR'?(()=>{const pk=d.pkg||{};const k=can('salaries')?DB.comp[c.id]||{}:{};const cur=pk.current??k.current??'',exp=pk.expected??k.expected??'';const nd=d.noticeDays??(/^[0-9]+$/.test(String(c.notice||''))?c.notice:'');return `<fieldset style="border-color:var(--sky)"><legend>HR details</legend><div class="grid g3">
         <label class="field"><span>Notice period (days)</span><input type="number" min="1" max="100" name="hd_notice" value="${esc(nd)}" placeholder="1 – 100"></label>
         <label class="field"><span>Current package (monthly)</span><input type="number" min="0" name="hd_current" value="${esc(cur)}"></label>
