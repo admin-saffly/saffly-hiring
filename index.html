@@ -409,13 +409,16 @@ if(typeof google==='undefined'||!google.script){window.__nogs=true;setTimeout(fu
 
 const NL=String.fromCharCode(10);
 const TODAY=(()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)})();
-const LEVELS=['Junior','Mid-Level','Senior','Manager','Director'];
-const ENGLISH=['Basic','Intermediate','Upper-Intermediate','Advanced','Fluent'];
+const LEVELS=['Entry','Junior','Mid-Level','Senior','Lead','Manager','Director'];
+const ENGLISH=['Elementary','Basic','Intermediate','Upper-Intermediate','Advanced','Fluent'];
 const RL=['','Poor','Below expectations','Meets expectations','Strong','Outstanding'];
 const REC4={'Strong hire':{recommended:'Recommended',hire:'Hire',outcome:'Proceed to offer'},'Hire':{recommended:'Recommended',hire:'Hire',outcome:'Proceed to offer'},'Hold':{recommended:'Recommended',hire:'N/A',outcome:'Further interview'},'No hire':{recommended:'Not Recommended',hire:'Not Hire',outcome:'Do not proceed'}};
 const grpOf=(q,type)=>q.levels&&q.levels.length?q.levels.join(' / ')+' level competences':q.position&&q.position!=='All'?'Role-specific questions · '+q.position:'Core '+(type==='HR'?'HR':'technical')+' competences';
-const STATUSES=['New','HR interview','Technical interview','Awaiting decision','Hired','Not hired','On hold'];
-const STATUS_CLS={'New':'p-new','HR interview':'p-hr','Technical interview':'p-tech','Awaiting decision':'p-await','Hired':'p-hired','Not hired':'p-not','On hold':'p-hold'};
+const STATUSES=['New','HR interview','Technical interview','Offer phase','Hired','On hold','Not accepted','Not selected'];
+const DECISIONS=['Interviewing phase','Offer phase','Hired','Open position'];
+const noticeTxt=n=>n===''||n==null?'—':/^[0-9]+$/.test(String(n))?n+' days':String(n);
+const recCls={'Strong hire':'p-good','Hire':'p-good','Hold':'p-await','No hire':'p-bad'};
+const STATUS_CLS={'New':'p-new','HR interview':'p-hr','Technical interview':'p-tech','Offer phase':'p-await','Hired':'p-hired','On hold':'p-hold','Not accepted':'p-not','Not selected':'p-not','Awaiting decision':'p-await','Not hired':'p-not'};
 const COMPS={
   HR:['Communication Skills','Motivation & Career Goals','Values & Cultural Fit','Teamwork & Collaboration','Professionalism & Attitude','English Level','Learning Agility','Openness to Feedback','Problem-Solving','Understanding of the Role','Time Management','Ownership & Accountability','Working Independently','Handling Pressure & Deadlines','Conflict Handling','Career Progression','Mentoring & Knowledge Sharing','Decision Making','Stakeholder Management','Initiative & Improvement','Handling Ambiguity','People Management','Leadership Style','Strategic Thinking','Difficult Conversations','Budget & Resource Planning','Change Management','Accountability for Results','Leadership & People Management'],
   Technical:['Core Technical Knowledge','Hands-on Experience & Tools','Problem-Solving','Troubleshooting & Debugging','Design & Architecture Thinking','Quality & Best Practices','Technical Communication','Learning & Staying Current','Job Knowledge','Technical Expertise','Technical Competencies','Relevant Industry Experience','Leadership & People Management']
@@ -588,7 +591,7 @@ function seed(){
   return {entities,depts,positions,users,questions,candidates,comp,interviews,evaluations,decisions,config,currentUser:'u1'};
 }
 function applicableQuestions(type,c,questions){
-  return questions.filter(q=>q.active&&q.type===type&&(q.position==='All'||q.position===c.position)&&(!q.levels.length||q.levels.includes(c.level)))
+  return questions.filter(q=>q.active&&q.type===type&&(q.position==='All'||q.position===c.position)&&(!q.levels.length||q.levels.includes(c.level)||(c.level==='Lead'&&q.levels.includes('Senior'))||(c.level==='Entry'&&q.levels.includes('Junior'))))
     .sort((a,b)=>COMPS[type].indexOf(a.comp)-COMPS[type].indexOf(b.comp));
 }
 
@@ -712,20 +715,33 @@ function candScores(cid){
   const evs=DB.evaluations.filter(e=>e.candId===cid&&e.submittedAt);
   const hr=avg(evs.filter(e=>e.type==='HR').map(evalScore).filter(x=>x!=null));
   const tech=avg(evs.filter(e=>e.type==='Technical').map(evalScore).filter(x=>x!=null));
-  const {hrWeight:wh,techWeight:wt}=DB.config;
-  const combined=hr!=null&&tech!=null?(hr*wh+tech*wt)/(wh+wt):null;
-  return {hr,tech,combined};
+  return {hr,tech,combined:null};
 }
+function recOf(cid,type){const r=DB.evaluations.filter(e=>e.candId===cid&&e.type===type&&e.submittedAt).map(e=>e.rec4);
+  if(!r.length)return null;return r.includes('No hire')?'No hire':r.includes('Hold')?'Hold':r.includes('Hire')?'Hire':'Strong hire'}
+const hrPassed=cid=>{const r=recOf(cid,'HR');return r==='Hire'||r==='Strong hire'};
+function recChip(cid,t){const r=recOf(cid,t);if(!r)return '<span class="muted">—</span>';const sc=candScores(cid)[t==='HR'?'hr':'tech'];
+  return `<span class="pill ${recCls[r]}">${r}</span>${sc!=null?` <span class="muted num" style="font-size:12px">${f1(sc)}</span>`:''}`}
 const isDone=iv=>DB.evaluations.some(e=>e.interviewId===iv.id&&e.submittedAt)||(DB.doneIvs||[]).includes(iv.id);
 function status(c){
   const d=DB.decisions[c.id];
-  if(d) return d.decision==='Hire'?'Hired':d.decision==='Do not hire'?'Not hired':'On hold';
+  if(d&&d.decision&&d.decision!=='Interviewing phase'){
+    if(d.decision==='Hired'||d.decision==='Hire')return 'Hired';
+    if(d.decision==='Offer phase')return 'Offer phase';
+    if(d.decision==='Open position'||d.decision==='Do not hire')return 'Not selected';
+    if(d.decision==='On hold')return 'On hold';
+  }
   const ivs=DB.interviews.filter(i=>i.candId===c.id);
   if(!ivs.length) return 'New';
-  const done=t=>ivs.some(i=>i.type===t&&isDone(i));
-  if(!done('HR')) return 'HR interview';
-  if(!done('Technical')||ivs.some(i=>!isDone(i))) return 'Technical interview';
-  return 'Awaiting decision';
+  const hr=recOf(c.id,'HR');
+  if(!hr) return 'HR interview';
+  if(hr==='No hire') return 'Not accepted';
+  if(hr==='Hold') return 'On hold';
+  const t=recOf(c.id,'Technical');
+  if(!t||ivs.some(i=>i.type==='Technical'&&!isDone(i))) return 'Technical interview';
+  if(t==='No hire') return 'Not accepted';
+  if(t==='Hold') return 'On hold';
+  return 'Offer phase';
 }
 const pill=s=>`<span class="pill ${STATUS_CLS[s]||''}">${esc(s)}</span>`;
 const scoreCls=s=>s==null?'':s>=DB.config.passMark?'p-good':'p-bad';
@@ -765,79 +781,75 @@ function vDashboard(){
   const ivs=DB.interviews.filter(i=>ids.has(i.candId));
   const evs=DB.evaluations.filter(e=>ids.has(e.candId)&&e.submittedAt);
   const hrDone=ivs.filter(i=>i.type==='HR'&&isDone(i)).length, tDone=ivs.filter(i=>i.type==='Technical'&&isDone(i)).length;
-  const pending=ivs.filter(i=>!isDone(i));
-  const overdue=pending.filter(i=>i.date<TODAY);
-  const comb=list.map(c=>candScores(c.id).combined).filter(x=>x!=null);
-  const allScores=evs.map(evalScore).filter(x=>x!=null);
+  const techPend=ivs.filter(i=>i.type==='Technical'&&!isDone(i));
+  const overdue=ivs.filter(i=>!isDone(i)&&i.date<TODAY);
   const rec=evs.filter(e=>e.recommended==='Recommended').length, nrec=evs.length-rec;
-  const st={}; STATUSES.forEach(s=>st[s]=0); list.forEach(c=>st[status(c)]++);
-  const groupBars=(key,labelFn=x=>x)=>{const m={};list.forEach(c=>m[c[key]]=(m[c[key]]||0)+1);const mx=Math.max(1,...Object.values(m));
+  const st={}; STATUSES.forEach(s=>st[s]=0); list.forEach(c=>{const x=status(c);st[x]=(st[x]||0)+1});
+  const groupBars=(key)=>{const m={};list.forEach(c=>m[c[key]]=(m[c[key]]||0)+1);const mx=Math.max(1,...Object.values(m));
     const rows=Object.entries(m).sort((a,b)=>b[1]-a[1]);
-    return rows.length?`<div class="bars">${rows.map(([k,v])=>`<div class="bar"><span class="lbl" title="${esc(labelFn(k))}">${esc(labelFn(k))}</span><span class="trk"><i style="width:${v/mx*100}%"></i></span><span class="v">${v}</span></div>`).join('')}</div>`:'<p class="empty">No candidates match these filters.</p>'};
+    return rows.length?`<div class="bars">${rows.map(([k,v])=>`<div class="bar"><span class="lbl" title="${esc(k)}">${esc(k)}</span><span class="trk"><i style="width:${v/mx*100}%"></i></span><span class="v">${v}</span></div>`).join('')}</div>`:'<p class="empty">No candidates match these filters.</p>'};
   const opt=(arr,sel)=>arr.map(x=>`<option value="${esc(x.v??x)}" ${String(x.v??x)===sel?'selected':''}>${esc(x.l??x)}</option>`).join('');
-  const awaiting=list.filter(c=>status(c)==='Awaiting decision');
-  const days=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
-  const decided=list.filter(c=>DB.decisions[c.id]&&DB.decisions[c.id].decision!=='On hold');
-  const tth=avg(decided.map(c=>days(c.registered,DB.decisions[c.id].date)));
-  const hireRate=decided.length?st['Hired']/decided.length*100:null;
-  const inProc=list.filter(c=>['New','HR interview','Technical interview','Awaiting decision'].includes(status(c))).length;
-  const entRows=DB.entities.map(e=>{const cs=list.filter(c=>c.entity===e.id);const sc=cs.map(c=>candScores(c.id).combined).filter(x=>x!=null);
-    return {e,n:cs.length,proc:cs.filter(c=>['New','HR interview','Technical interview','Awaiting decision'].includes(status(c))).length,hired:cs.filter(c=>status(c)==='Hired').length,not:cs.filter(c=>status(c)==='Not hired').length,avg:avg(sc)}}).filter(r=>r.n);
-  const ivRows=DB.users.filter(u=>u.role!=='management').map(u=>{const mine=ivs.filter(i=>i.interviewerId===u.id);const done=mine.filter(isDone);
+  const inProc=st['New']+st['HR interview']+st['Technical interview'];
+  const decided=st['Hired']+st['Not selected']+st['Not accepted'];
+  const hireRate=decided?st['Hired']/decided*100:null;
+  const ivRows=DB.users.map(u=>{const mine=ivs.filter(i=>i.interviewerId===u.id);const done=mine.filter(isDone);
     const sc=evs.filter(e=>e.interviewerId===u.id).map(evalScore).filter(x=>x!=null);
     return {u,n:mine.length,done:done.length,pend:mine.length-done.length,late:mine.filter(i=>!isDone(i)&&i.date<TODAY).length,avg:avg(sc)}}).filter(r=>r.n);
-  const stackColors={'New':'#8fa9c6','HR interview':'#4f7fb0','Technical interview':'var(--brand)','Awaiting decision':'var(--warn)','Hired':'var(--green)','Not hired':'var(--bad)','On hold':'#d9a24a'};
+  const PIPE=[['New','New','#8fa9c6'],['HR interview','HR interview','#4f7fb0'],['Technical interview','Technical','var(--brand)'],['Offer phase','Offer phase','var(--warn)'],['Hired','Hired','var(--green)']];
+  const pTot=Math.max(1,PIPE.reduce((a,p)=>a+st[p[0]],0));
+  const fin=[['Interviewing phase',inProc,'var(--sky)'],['Offer phase',st['Offer phase'],'var(--warn)'],['Hired',st['Hired'],'var(--green)'],['Open positions',st['Not selected']+st['Not accepted'],'var(--bad)']];
+  const needTech=list.filter(c=>hrPassed(c.id)&&!DB.interviews.some(i=>i.candId===c.id&&i.type==='Technical'));
+  const offer=list.filter(c=>status(c)==='Offer phase');
+  const posList=[...new Set(DB.positions.map(p=>p.title).concat(all.map(c=>c.position)))].filter(Boolean).sort();
+  const deptList=[...new Set((DB.depts||[]).concat(all.map(c=>c.dept)))].filter(Boolean).sort();
+  const nothing=!overdue.length&&!needTech.length&&!offer.length;
   return `
-  <div class="head"><div><h1>Recruitment dashboard</h1><p>All entities · registrations from ${fdate(DF.from)} to ${fdate(DF.to)}. Salaries are visible to HR only.</p></div></div>
+  <div class="head"><div><h1>Recruitment dashboard</h1><p>Registrations from ${fdate(DF.from)} to ${fdate(DF.to)}. A candidate moves to the technical interview only after passing HR.</p></div></div>
   <div class="panel"><div class="filters">
     <label class="field"><span>Entity</span><select id="df-entity"><option value="">All entities</option>${opt(DB.entities.map(e=>({v:e.id,l:e.name})),DF.entity)}</select></label>
-    <label class="field"><span>Department</span><select id="df-dept"><option value="">All departments</option>${opt(DB.depts,DF.dept)}</select></label>
-    <label class="field"><span>Position</span><select id="df-position"><option value="">All positions</option>${opt(DB.positions.map(p=>p.title),DF.position)}</select></label>
-    <label class="field"><span>Recruitment status</span><select id="df-status"><option value="">All statuses</option>${opt(STATUSES,DF.status)}</select></label>
+    <label class="field"><span>Department</span><select id="df-dept"><option value="">All departments</option>${opt(deptList,DF.dept)}</select></label>
+    <label class="field"><span>Job title</span><select id="df-position"><option value="">All job titles</option>${opt(posList,DF.position)}</select></label>
+    <label class="field"><span>Status</span><select id="df-status"><option value="">All statuses</option>${opt(STATUSES,DF.status)}</select></label>
     <label class="field"><span>From</span><input type="date" id="df-from" value="${DF.from}"></label>
     <label class="field"><span>To</span><input type="date" id="df-to" value="${DF.to}"></label>
     <button class="btn sm" type="button" data-act="df-clear">Clear</button>
   </div></div>
-  <div class="grid g4">
-    <div class="kpi hero"><span>Total candidates</span><b>${list.length}</b><small>${st['Hired']} hired · ${st['Not hired']} not hired</small></div>
+  <div class="grid g3">
+    <div class="kpi hero"><span>Total candidates</span><b>${list.length}</b><small>${st['Hired']} hired · ${st['Not accepted']} not accepted</small></div>
+    <div class="kpi"><span>In process now</span><b>${inProc}</b><small>new, HR or technical interview</small></div>
+    <div class="kpi"><span>Offer phase</span><b style="color:var(--warn)">${st['Offer phase']}</b><small>candidates in the offer phase</small></div>
     <div class="kpi"><span>HR interviews completed</span><b>${hrDone}</b><small>of ${ivs.filter(i=>i.type==='HR').length} scheduled</small></div>
     <div class="kpi"><span>Technical interviews completed</span><b>${tDone}</b><small>of ${ivs.filter(i=>i.type==='Technical').length} scheduled</small></div>
-    <div class="kpi"><span>Pending interviews</span><b>${pending.length}</b><small>${overdue.length?`<span style="color:var(--bad)">${overdue.length} past due</span>`:'none past due'}</small></div>
-    <div class="kpi"><span>Average interview score</span><b>${f1(avg(allScores))}</b><small>across ${allScores.length} evaluations · out of 5</small></div>
-    <div class="kpi"><span>Average combined score</span><b>${f1(avg(comb))}</b><small>HR ${DB.config.hrWeight}% · Technical ${DB.config.techWeight}%</small></div>
+    <div class="kpi"><span>Technical pending interviews</span><b>${techPend.length}</b><small>${techPend.filter(i=>i.date<TODAY).length?`<span style="color:var(--bad)">${techPend.filter(i=>i.date<TODAY).length} past due</span>`:'none past due'}</small></div>
     <div class="kpi"><span>Recommended</span><b style="color:var(--good)">${rec}</b><small>interviewer recommendations</small></div>
     <div class="kpi"><span>Not recommended</span><b style="color:var(--bad)">${nrec}</b><small>interviewer recommendations</small></div>
-    <div class="kpi"><span>In process now</span><b>${inProc}</b><small>not yet decided</small></div>
-    <div class="kpi"><span>Average time to decision</span><b>${tth==null?'—':Math.round(tth)+' days'}</b><small>registration → final decision</small></div>
-    <div class="kpi"><span>Hire rate</span><b>${hireRate==null?'—':Math.round(hireRate)+'%'}</b><small>hired ÷ decided candidates</small></div>
-    <div class="kpi"><span>Awaiting decision</span><b style="color:var(--warn)">${awaiting.length}</b><small>both interviews complete</small></div>
+    <div class="kpi"><span>Hire rate</span><b>${hireRate==null?'—':Math.round(hireRate)+'%'}</b><small>hired ÷ closed candidates</small></div>
   </div>
-  <div class="panel"><h2>Pipeline by recruitment status</h2>
-    <div class="stack" role="img" aria-label="Pipeline">${STATUSES.filter(s=>st[s]).map(s=>`<i style="width:${st[s]/Math.max(1,list.length)*100}%;background:${stackColors[s]}" title="${s}: ${st[s]}"></i>`).join('')}</div>
-    <div class="legend">${STATUSES.map(s=>`<span style="--c:${stackColors[s]}">${s} <b class="num">${st[s]}</b></span>`).join('')}</div>
+  <div class="panel"><h2>Pipeline by recruitment stage</h2>
+    <div class="stack" role="img" aria-label="Pipeline">${PIPE.filter(p=>st[p[0]]).map(p=>`<i style="width:${st[p[0]]/pTot*100}%;background:${p[2]}" title="${p[1]}: ${st[p[0]]}"></i>`).join('')}</div>
+    <div class="legend">${PIPE.map(p=>`<span style="--c:${p[2]}">${p[1]} <b class="num">${st[p[0]]}</b></span>`).join('')}</div>
+  </div>
+  <div class="grid g2">
+    <div class="panel"><h3>Final hiring decision</h3>
+      <div class="bars">${fin.map(([l,v,c2])=>`<div class="bar"><span class="lbl">${l}</span><span class="trk"><i style="width:${v/Math.max(1,list.length)*100}%;background:${c2}"></i></span><span class="v">${v}</span></div>`).join('')}</div>
+      <p class="muted" style="margin:10px 0 0;font-size:12.5px">Open positions = candidates not accepted or not selected, so the position is still open.</p></div>
+    <div class="panel"><h3>Needs action</h3>
+      ${nothing?'<p class="empty">Nothing waiting.</p>':''}
+      <div class="tbl-wrap" ${nothing?'hidden':''}><table><thead><tr><th>Candidate</th><th>Action</th><th>Owner</th></tr></thead><tbody>
+      ${overdue.map(i=>{const c=DB.candidates.find(x=>x.id===i.candId);return `<tr class="click" data-open="${c.id}"><td>${esc(c.name)}<div class="mono muted">${c.id}</div></td><td><span class="pill p-bad">${i.type} interview past due</span><div class="muted">${fdate(i.date)}</div></td><td>${esc(uname(i.interviewerId))}</td></tr>`}).join('')}
+      ${needTech.map(c=>`<tr class="click" data-open="${c.id}"><td>${esc(c.name)}<div class="mono muted">${c.id}</div></td><td><span class="pill p-tech">Passed HR · schedule technical</span></td><td>HR</td></tr>`).join('')}
+      ${offer.map(c=>`<tr class="click" data-open="${c.id}"><td>${esc(c.name)}<div class="mono muted">${c.id}</div></td><td><span class="pill p-await">Offer phase</span></td><td>HR</td></tr>`).join('')}
+      </tbody></table></div></div>
   </div>
   <div class="grid g3">
     <div class="panel"><h3>Candidates by seniority</h3>${groupBars('level')}</div>
     <div class="panel"><h3>Candidates by department</h3>${groupBars('dept')}</div>
-    <div class="panel"><h3>Candidates by position</h3>${groupBars('position')}</div>
+    <div class="panel"><h3>Candidates by job title</h3>${groupBars('position')}</div>
   </div>
   <div class="panel"><h3>Interviewer activity</h3>
-    <div class="tbl-wrap"><table><thead><tr><th>Interviewer</th><th>Role</th><th class="r">Assigned</th><th class="r">Completed</th><th class="r">Pending</th><th class="r">Past due</th><th class="r">Avg score given</th></tr></thead><tbody>
-    ${ivRows.map(r=>`<tr><td><b>${esc(r.u.name)}</b><div class="muted" style="font-size:12px">${esc(r.u.title)} · ${esc(ent(r.u.entity).name)}</div></td><td>${r.u.role==='hr'?'<span class="tag hr">HR</span>':'<span class="tag tech">Technical</span>'}</td><td class="r num">${r.n}</td><td class="r num">${r.done}</td><td class="r num">${r.pend}</td><td class="r num" style="${r.late?'color:var(--bad);font-weight:700':''}">${r.late}</td><td class="r">${scoreChip(r.avg)}</td></tr>`).join('')}
-    </tbody></table></div>
-    <p class="muted" style="margin:10px 0 0;font-size:12.5px">An interviewer whose average is far above or below the others may be rating too easily or too strictly. Worth a calibration talk.</p></div>
-  <div class="grid g2">
-    <div class="panel"><h3>Final hiring decisions</h3>
-      <div class="bars">${[['Hired','var(--green)'],['Not hired','var(--bad)'],['On hold','var(--warn)'],['Awaiting decision','var(--sky)']].map(([s,c])=>`<div class="bar"><span class="lbl">${s}</span><span class="trk"><i style="width:${st[s]/Math.max(1,list.length)*100}%;background:${c}"></i></span><span class="v">${st[s]}</span></div>`).join('')}</div>
-    </div>
-    <div class="panel"><h3>Needs action</h3>
-      ${!overdue.length&&!awaiting.length?'<p class="empty">Nothing waiting.</p>':''}
-      <div class="tbl-wrap" ${!overdue.length&&!awaiting.length?'hidden':''}><table><thead><tr><th>Candidate</th><th>Issue</th><th>Owner</th></tr></thead><tbody>
-      ${overdue.map(i=>{const c=DB.candidates.find(x=>x.id===i.candId);return `<tr class="click" data-open="${c.id}"><td>${esc(c.name)}<div class="mono muted">${c.id}</div></td><td><span class="pill p-bad">${i.type} interview past due</span><div class="muted">${fdate(i.date)}</div></td><td>${esc(uname(i.interviewerId))}</td></tr>`}).join('')}
-      ${awaiting.map(c=>`<tr class="click" data-open="${c.id}"><td>${esc(c.name)}<div class="mono muted">${c.id}</div></td><td><span class="pill p-await">Final decision required</span><div class="muted">Combined ${f1(candScores(c.id).combined)}</div></td><td>HR</td></tr>`).join('')}
-      </tbody></table></div>
-    </div>
-  </div>`;
+    <div class="tbl-wrap"><table><thead><tr><th>Interviewer</th><th class="r">Assigned</th><th class="r">Completed</th><th class="r">Pending</th><th class="r">Past due</th></tr></thead><tbody>
+    ${ivRows.map(r=>`<tr><td><b>${esc(r.u.name)}</b><div class="muted" style="font-size:12px">${esc(r.u.title||'')}</div></td><td class="r num">${r.n}</td><td class="r num">${r.done}</td><td class="r num">${r.pend}</td><td class="r num" style="${r.late?'color:var(--bad);font-weight:700':''}">${r.late}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No interviews yet.</td></tr>'}
+    </tbody></table></div></div>`;
 }
 after.dashboard=()=>{
   ['entity','dept','position','status','from','to'].forEach(k=>$('#df-'+k).addEventListener('change',e=>{DF[k]=e.target.value;render()}));
@@ -856,10 +868,10 @@ function vCandidates(){
     <label class="field"><span>Entity</span><select id="cf-entity"><option value="">All</option>${DB.entities.map(e=>`<option value="${e.id}" ${CF.entity===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}</select></label>
     <label class="field"><span>Status</span><select id="cf-status"><option value="">All</option>${STATUSES.map(s=>`<option ${CF.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
   </div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Candidate</th><th>Position</th><th>Entity</th><th>Status</th><th class="r">HR</th><th class="r">Technical</th><th class="r">Combined</th></tr></thead><tbody>
-  ${list.map(c=>{const s=candScores(c.id);return `<tr class="click" data-open="${c.id}"><td class="mono">${c.id}</td><td><b>${esc(c.name)}</b><div class="muted">${esc(c.years)} yrs · ${esc(c.employer)}</div></td><td>${esc(c.position)}<div class="muted">${esc(c.level)} · ${esc(c.dept)}</div></td><td>${esc(ent(c.entity).name)}</td><td>${pill(status(c))}</td><td class="r">${scoreChip(s.hr)}</td><td class="r">${scoreChip(s.tech)}</td><td class="r">${scoreChip(s.combined)}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">No candidates match.</td></tr>'}
+  <div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Candidate</th><th>Position</th><th>Entity</th><th>Status</th><th>HR result</th><th>Technical result</th></tr></thead><tbody>
+  ${list.map(c=>{const s=candScores(c.id);return `<tr class="click" data-open="${c.id}"><td class="mono">${c.id}</td><td><b>${esc(c.name)}</b><div class="muted">${esc(c.years)} yrs · ${esc(c.employer)}</div></td><td>${esc(c.position)}<div class="muted">${esc(c.level)} · ${esc(c.dept)}</div></td><td>${esc(ent(c.entity).name)}</td><td>${pill(status(c))}</td><td>${recChip(c.id,'HR')}</td><td>${recChip(c.id,'Technical')}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">No candidates match.</td></tr>'}
   </tbody></table></div>
-  <p class="muted" style="margin:0;font-size:12.5px">Scores are out of 5. Green = at or above the pass mark (${DB.config.passMark}), red = below.</p>`;
+  <p class="muted" style="margin:0;font-size:12.5px">Each result shows the interviewer's recommendation and the score out of 5. The technical interview opens only after the candidate passes HR.</p>`;
 }
 after.candidates=()=>{
   $('#cf-q').addEventListener('input',e=>{CF.q=e.target.value;const pos=e.target.selectionStart;render();const i=$('#cf-q');i.focus();i.setSelectionRange(pos,pos)});
@@ -890,10 +902,8 @@ function vCandidate(){
       <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">${pill(status(c))}${role()!=='interviewer'?`<button class="btn pri sm" type="button" data-pack="${c.id}">New hire pack</button>`:''}</div>
     </div>
     <div class="score-row" style="margin-top:14px">
-      <div class="score"><span>HR score</span><b>${f1(s.hr)}</b></div>
-      <div class="score"><span>Technical score</span><b>${f1(s.tech)}</b></div>
-      <div class="score"><span>Combined</span><b style="color:${s.combined==null?'inherit':s.combined>=DB.config.passMark?'var(--good)':'var(--bad)'}">${f1(s.combined)}</b></div>
-      <div class="score"><span>Pass mark</span><b>${DB.config.passMark.toFixed(1)}</b></div>
+      <div class="score"><span>HR result</span><b style="font-size:14px">${recChip(c.id,'HR')}</b></div>
+      <div class="score"><span>Technical result</span><b style="font-size:14px">${recChip(c.id,'Technical')}</b></div>
     </div>
   </div>
   <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button type="button" role="tab" data-tab="${k}" class="${VIEW.tab===k?'on':''}">${l}</button>`).join('')}</div>
@@ -913,7 +923,7 @@ function tabProfile(c){
       <div><dt>Graduation year</dt><dd>${esc(c.gradYear||'—')}</dd></div>
       <div><dt>Current employer</dt><dd>${esc(c.employer)}</dd></div>
       <div><dt>English level</dt><dd>${esc(c.english)}</dd></div>
-      <div><dt>Notice period</dt><dd>${esc(c.notice)}</dd></div>
+      <div><dt>Notice period</dt><dd>${esc(noticeTxt(c.notice))}</dd></div>
       <div><dt>Registered</dt><dd>${fdate(c.registered)}</dd></div>
       <div><dt>CV attachment</dt><dd>📎 ${esc(c.cv||'—')}${c.cvFile?` <button class="btn sm" type="button" data-cv="${c.id}">Download CV</button>`:''}${c.cvLink?`<br><a href="${esc(c.cvLink)}" target="_blank" rel="noopener" style="color:var(--sky)">Open CV link</a>`:''}</dd></div>
     </dl></div>
@@ -991,42 +1001,39 @@ function tabInterviews(c){
   const ivs=DB.interviews.filter(i=>i.candId===c.id);
   const evs=API.evaluations(c.id);
   const hidden=API.hiddenTechCount(c.id);
+  const hrOk=hrPassed(c.id);
   const section=(type)=>{
     const tiv=ivs.filter(i=>i.type===type);
     const tev=evs.filter(e=>e.type===type&&e.submittedAt);
     return `<div class="panel"><div class="panel-head"><h2>${type} interview</h2><span class="muted">${tiv.length} scheduled · ${tiv.filter(isDone).length} completed</span></div>
       ${tiv.length?`<div class="tbl-wrap" style="margin-bottom:14px"><table><thead><tr><th>Date</th><th>Interviewer</th><th>Format</th><th>Status</th><th></th></tr></thead><tbody>
-      ${tiv.map(i=>`<tr><td>${fdate(i.date)}</td><td>${esc(uname(i.interviewerId))}</td><td>${esc(i.format)}</td><td>${isDone(i)?'<span class="pill p-good">Completed</span>':i.date<TODAY?'<span class="pill p-bad">Past due</span>':'<span class="pill p-hr">Scheduled</span>'}</td>
+      ${tiv.map(i=>`<tr><td>${r==='hr'?`<input type="date" value="${esc(i.date)}" data-ivdate="${i.id}" aria-label="Interview date" style="min-width:140px">`:fdate(i.date)}</td><td>${esc(uname(i.interviewerId))}</td><td>${esc(i.format)}</td><td>${isDone(i)?'<span class="pill p-good">Completed</span>':i.date<TODAY?'<span class="pill p-bad">Past due</span>':'<span class="pill p-hr">Scheduled</span>'}</td>
         <td class="r">${i.interviewerId===u.id&&!isDone(i)?`<button class="btn pri sm" type="button" data-eval="${i.id}">Evaluate</button>`:''}</td></tr>`).join('')}
-      </tbody></table></div>`:'<p class="empty">No interview scheduled.</p>'}
+      </tbody></table></div>`:(type==='Technical'&&!hrOk?'<p class="empty">Opens after the candidate passes the HR interview (HR recommendation Hire or Strong hire).</p>':'<p class="empty">No interview scheduled.</p>')}
       <div class="grid" style="gap:12px">${tev.map(e=>evCard(e,c)).join('')}</div>
       ${type==='Technical'&&hidden?`<div class="hidden-box">🔒 ${hidden} other technical evaluation${hidden>1?'s are':' is'} hidden until you submit your own. This keeps each interviewer's feedback independent.</div>`:''}
     </div>`;
   };
   const sched=r==='hr'?`<form class="panel" id="schedForm"><h2>Schedule an interview</h2>
     <div class="grid g4">
-      <label class="field"><span>Type</span><select name="type"><option>HR</option><option>Technical</option></select></label>
+      <label class="field"><span>Type</span><select name="type"><option>HR</option>${hrOk?'<option>Technical</option>':''}</select></label>
       <label class="field"><span>Interviewer</span><select name="interviewer">${DB.users.filter(x=>x.active!==false).map(x=>`<option value="${x.id}">${esc(x.name)} — ${esc(x.title)}</option>`).join('')}</select></label>
       <label class="field"><span>Date</span><input type="date" name="date" value="${TODAY}" required></label>
       <label class="field"><span>Format</span><select name="format"><option>In person</option><option>Video</option></select></label>
     </div><div style="margin-top:12px"><button class="btn pri" type="submit">Schedule</button></div>
-    <p class="muted" style="margin:8px 0 0;font-size:12.5px">Add one row per interviewer. Each interviewer then fills their own independent evaluation. The interviewer receives an e-mail with the details and a link to the system.</p></form>`:'';
+    <p class="muted" style="margin:8px 0 0;font-size:12.5px">Add one row per interviewer. Then let the interviewer know: they sign in with their own username and find it under My interviews.${hrOk?'':' The technical interview can be scheduled once the candidate passes HR.'} You can change a date any time from the table above.</p></form>`:'';
   return section('HR')+section('Technical')+sched;
 }
 function resultPanel(c){
-  const s=candScores(c.id), evs=DB.evaluations.filter(e=>e.candId===c.id&&e.submittedAt), k=DB.config, b=band(s.combined);
+  const s=candScores(c.id), evs=DB.evaluations.filter(e=>e.candId===c.id&&e.submittedAt), k=DB.config;
   const comp={}; evs.forEach(e=>e.ratings.forEach(r=>{if(!r.rating)return;(comp[r.comp]=comp[r.comp]||{w:0,t:0,type:new Set()});comp[r.comp].w+=r.weight;comp[r.comp].t+=r.rating*r.weight;comp[r.comp].type.add(e.type)}));
   const flags=[]; evs.forEach(e=>e.ratings.forEach(r=>{if(r.rating===1)flags.push(`${uname(e.interviewerId)}: "${r.text}" rated 1`)}));
-  const recs=evs.filter(e=>e.recommended==='Recommended').length;
-  return `<div class="panel result"><div class="panel-head"><h2>Interview result</h2><span class="pill ${b.cls}" style="font-size:13px">${b.label}</span></div>
-    <div class="grid g4">
-      <div class="kpi"><span>HR score</span><b>${f1(s.hr)}</b><small>× ${k.hrWeight}%</small></div>
-      <div class="kpi"><span>Technical score</span><b>${f1(s.tech)}</b><small>× ${k.techWeight}%</small></div>
-      <div class="kpi hero"><span>Combined score</span><b>${f1(s.combined)}</b><small>out of 5</small></div>
-      <div class="kpi"><span>Interviewers recommending</span><b>${recs} / ${evs.length}</b><small>${evs.length-recs} not recommending</small></div>
-    </div>
-    ${s.combined!=null?`<p class="calc">Calculation: (${f1(s.hr)} × ${k.hrWeight}% ) + (${f1(s.tech)} × ${k.techWeight}% ) = <b>${f1(s.combined)}</b> → ${b.label} → suggested next step: <b>${b.next}</b></p>`:'<p class="calc">The combined result appears once both the HR and the technical interview are submitted.</p>'}
-    <div class="scale">${[['No hire','below '+k.furtherMark.toFixed(1),'p-bad'],['Hold · further interview',k.furtherMark.toFixed(1)+' – '+(k.passMark-0.01).toFixed(2),'p-await'],['Hire',k.passMark.toFixed(1)+' – '+(k.strongMark-0.01).toFixed(2),'p-good'],['Strong hire',k.strongMark.toFixed(1)+' and above','p-good']].map(([l,r,c2])=>`<div class="${b.label===l.split(' ·')[0]?'on':''}"><span class="pill ${c2}">${l}</span><small>${r}</small></div>`).join('')}</div>
+  const box=(t,sc)=>{const r=recOf(c.id,t);return `<div class="kpi"><span>${t} interview</span><b>${r?`<span class="pill ${recCls[r]}" style="font-size:15px">${r}</span>`:'—'}</b><small>${sc!=null?'Score '+f1(sc)+' out of 5':'Not evaluated yet'}</small></div>`};
+  const hrR=recOf(c.id,'HR'), tR=recOf(c.id,'Technical');
+  const next=!hrR?'Waiting for the HR interview.':hrR==='No hire'?'Not accepted at the HR interview. The candidate does not go to the technical interview.':hrR==='Hold'?'On hold after the HR interview.':!tR?'Passed the HR interview. Technical interview next.':tR==='No hire'?'Not accepted at the technical interview.':tR==='Hold'?'On hold after the technical interview.':'Passed both interviews. Offer phase.';
+  return `<div class="panel result"><div class="panel-head"><h2>Interview result</h2>${pill(status(c))}</div>
+    <div class="grid g2">${box('HR',s.hr)}${box('Technical',s.tech)}</div>
+    <p class="calc">${next}</p>
     ${Object.keys(comp).length?`<h3 style="margin:18px 0 10px">Score by competency</h3><div class="bars">${Object.entries(comp).sort((a,b2)=>b2[1].t/b2[1].w-a[1].t/a[1].w).map(([n,v])=>{const x=v.t/v.w;return `<div class="bar"><span class="lbl" title="${esc(n)}">${esc(n)} <span class="muted" style="font-size:11px">${[...v.type].join(' + ')}</span></span><span class="trk"><i style="width:${x/5*100}%;background:${x>=k.passMark?'var(--green)':x>=k.furtherMark?'var(--warn)':'var(--bad)'}"></i></span><span class="v">${x.toFixed(1)}</span></div>`}).join('')}</div>`:''}
     ${flags.length?`<div class="lock-note" style="margin-top:14px;background:var(--bad-soft)"><b style="color:var(--bad)">⚑</b><span><b style="color:var(--bad)">Red flags to discuss before any offer</b><br>${flags.map(esc).join('<br>')}</span></div>`:''}
   </div>`;
@@ -1042,7 +1049,7 @@ function tabDecision(c){
   if(role()!=='hr') return sumBox+`<div class="panel"><h2>Final decision</h2>${d.decision?`<dl class="kv"><div><dt>Decision</dt><dd>${pill(st)}</dd></div><div><dt>Date</dt><dd>${fdate(d.date)}</dd></div><div><dt>Approved by</dt><dd>${esc(d.approvedBy)}</dd></div><div><dt>Notes</dt><dd>${esc(d.notes)}</dd></div></dl>`:'<p class="empty">No final decision recorded yet. HR records it after all interviews.</p>'}</div>`;
   return sumBox+`<form class="panel" id="decForm"><h2>Record final hiring decision</h2>
     <div class="grid g3">
-      <label class="field"><span>Decision <i>*</i></span><select name="decision" required><option value="">Select…</option>${['Hire','Do not hire','On hold'].map(x=>`<option ${d.decision===x?'selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="field"><span>Decision <i>*</i></span><select name="decision" required><option value="">Select…</option>${DECISIONS.map(x=>{const cur=d.decision==='Hire'?'Hired':d.decision==='Do not hire'?'Open position':d.decision;return `<option ${cur===x?'selected':''}>${x}</option>`}).join('')}</select></label>
       <label class="field"><span>Decision date</span><input type="date" name="date" value="${d.date||TODAY}"></label>
       <label class="field"><span>Approved by</span><input type="text" name="approvedBy" value="${esc(d.approvedBy||me().name)}"></label>
     </div>
@@ -1066,6 +1073,7 @@ after.candidate=()=>{
     ['grade','gradeName','gradeReason','statutory','paymentTerms'].forEach(f=>k[f]=fd.get(f));
     k.allowances=[0,1,2].map(i=>({name:fd.get('an'+i),amount:Number(fd.get('aa'+i))||0})).filter(a=>a.name);
     DB.comp[VIEW.id]=k;save();render();toast('Compensation saved')})}
+  document.querySelectorAll('[data-ivdate]').forEach(el=>el.addEventListener('change',e=>{const iv=DB.interviews.find(i=>i.id===e.target.dataset.ivdate);if(!iv||!e.target.value)return;iv.date=e.target.value;save();toast('Interview date updated')}));
   const sf=$('#schedForm');
   if(sf){sf.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(sf);
     DB.interviews.push({id:'IV'+String(DB.interviews.length+1).padStart(3,'0')+Math.random().toString(36).slice(2,5),candId:VIEW.id,type:fd.get('type'),interviewerId:fd.get('interviewer'),date:fd.get('date'),format:fd.get('format')});
@@ -1093,7 +1101,7 @@ function vPack(){
   const ql=c.qualifications.length?c.qualifications:['','',''];
   html+=`<section class="slide">${head('01',`${esc(c.position)} hiring – ${esc(c.name)}`)}
     <div class="sl-grid2"><div><h3 class="sl-h">Executive summary</h3><p class="sl-p">${c.summary?esc(c.summary):blank('Not completed')}</p>
-      <p class="sl-p muted">${esc(c.years)} years of experience · ${esc(c.employer)} · English: ${esc(c.english)}${c.gradYear?' · Graduated '+esc(c.gradYear):''} · Notice: ${esc(c.notice)}</p></div>
+      <p class="sl-p muted">${esc(c.years)} years of experience · ${esc(c.employer)} · English: ${esc(c.english)}${c.gradYear?' · Graduated '+esc(c.gradYear):''} · Notice: ${esc(noticeTxt(c.notice))}</p></div>
     <div><h3 class="sl-h">Selected experience highlights</h3><ol class="sl-hl">${hl.map(x=>`<li>${x?esc(x):blank('Not completed')}</li>`).join('')}</ol></div></div>
     <h3 class="sl-h">Key strengths</h3><div class="sl-str">${st.map(x=>`<div>${x?esc(x):blank('—')}</div>`).join('')}</div>
     <h3 class="sl-h">Professional qualifications</h3><div class="quals">${ql.map(q=>{if(!q)return '<div class="blank">Not completed</div>';const [a,...b]=q.split(' — ');return `<div><b>${esc(a)}</b>${esc(b.join(' — '))}</div>`}).join('')}</div>
@@ -1141,10 +1149,9 @@ function vPack(){
       ${foot()}</section>`;
   });
   if(!evs.length) html+=`<section class="slide slim">${head('03','Interview feedback')}<p class="sl-p empty">No submitted interview feedback yet.</p>${foot()}</section>`;
-  const b=band(s.combined);
   html+=`<section class="slide">${head('04','Interview result & approval')}
-    <div class="grid g4"><div class="kpi"><span>HR score</span><b>${f1(s.hr)}</b><small>× ${DB.config.hrWeight}%</small></div><div class="kpi"><span>Technical score</span><b>${f1(s.tech)}</b><small>× ${DB.config.techWeight}%</small></div>
-      <div class="kpi hero"><span>Combined score</span><b>${f1(s.combined)}</b><small>${b.label}</small></div><div class="kpi"><span>Recommending</span><b>${evs.filter(x=>x.recommended==='Recommended').length} / ${evs.length}</b><small>interviewers</small></div></div>
+    <div class="grid g3"><div class="kpi"><span>HR interview</span><b>${recChip(c.id,'HR')}</b><small>${s.hr!=null?'Score '+f1(s.hr)+' / 5':'Not evaluated'}</small></div><div class="kpi"><span>Technical interview</span><b>${recChip(c.id,'Technical')}</b><small>${s.tech!=null?'Score '+f1(s.tech)+' / 5':'Not evaluated'}</small></div>
+      <div class="kpi hero"><span>Stage</span><b style="font-size:18px">${esc(status(c))}</b><small>${evs.filter(x=>x.recommended==='Recommended').length} of ${evs.length} interviewers recommend</small></div></div>
     <div class="tbl-wrap" style="margin-top:14px"><table class="mini"><thead><tr><th>Interviewer</th><th>Type</th><th class="r">Score</th><th>Verdict</th><th>Next step</th></tr></thead><tbody>
       ${evs.map(x=>`<tr><td>${esc(uname(x.interviewerId))}</td><td>${x.type}</td><td class="r num">${f1(evalScore(x))}</td><td>${esc(x.rec4||'')}</td><td>${esc(x.outcome)}</td></tr>`).join('')}</tbody></table></div>
     <div class="sl-grid2" style="margin-top:14px"><div><h3 class="sl-h">Final decision</h3><p class="sl-p">${d?`<b>${esc(d.decision)}</b> · ${fdate(d.date)}<br>Approved by: ${esc(d.approvedBy)}<br>${esc(d.notes||'')}`:blank('Awaiting decision')}</p></div>
@@ -1171,14 +1178,14 @@ function vNew(){
       <label class="field"><span>Candidate ID</span><input type="text" value="${c?c.id:'Generated on save'}" disabled></label>
       <label class="field"><span>Full name <i>*</i></span><input type="text" name="name" value="${v('name')}" required></label>
       <label class="field"><span>Entity / Company <i>*</i></span><select name="entity" required>${opt(DB.entities.map(e=>({v:e.id,l:e.name})),c?c.entity:'SFE')}</select></label>
-      <label class="field"><span>Position applied for <i>*</i></span><select name="position" id="posSel" required>${opt(DB.positions.map(p=>p.title),c?c.position:'')}</select></label>
-      <label class="field"><span>Department</span><input type="text" name="dept" id="deptOut" value="${c?esc(c.dept):esc(DB.positions[0].dept)}" readonly></label>
+      <label class="field"><span>Job title <i>*</i></span><input type="text" name="position" list="posList" value="${v('position')}" placeholder="e.g. Process Engineer" required><datalist id="posList">${[...new Set(DB.positions.map(p=>p.title).concat(DB.candidates.map(x=>x.position)))].filter(Boolean).map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
+      <label class="field"><span>Department <i>*</i></span><input type="text" name="dept" id="deptOut" list="deptList2" value="${v('dept')}" placeholder="e.g. Production"><datalist id="deptList2">${[...new Set((DB.depts||[]).concat(DB.candidates.map(x=>x.dept)))].filter(Boolean).map(t=>`<option value="${esc(t)}">`).join('')}</datalist></label>
       <label class="field"><span>Seniority level <i>*</i></span><select name="level" required>${opt(LEVELS,c?c.level:'Mid-Level')}</select></label>
       <label class="field"><span>Graduation year</span><input type="number" min="1970" max="2030" name="gradYear" value="${v('gradYear')}"></label>
       <label class="field"><span>Years of experience <i>*</i></span><input type="number" min="0" max="50" name="years" value="${v('years')}" required></label>
       <label class="field"><span>Current employer</span><input type="text" name="employer" value="${v('employer')}"></label>
       <label class="field"><span>English language level <i>*</i></span><select name="english" required>${opt(ENGLISH,c?c.english:'Intermediate')}</select></label>
-      <label class="field"><span>Notice period</span><select name="notice">${opt(['Immediate','2 weeks','1 month','2 months','3 months'],c?c.notice:'1 month')}</select></label>
+      <label class="field"><span>Notice period (days)</span><input type="number" min="1" max="100" name="notice" value="${c&&/^[0-9]+$/.test(String(c.notice))?c.notice:''}" placeholder="1 – 100"></label>
       <label class="field"><span>Registration date</span><input type="date" name="registered" value="${c?c.registered:TODAY}"></label>
       <label class="field"><span>CV attachment ${c?'':'<i>*</i>'} · PDF, DOC or DOCX, up to 5 MB</span><input type="file" name="cv" accept=".pdf,.doc,.docx">${c?`<small class="muted">Current: ${esc(c.cv)}</small>`:''}</label>
       <label class="field"><span>Or paste a CV link</span><input type="text" name="cvlink" placeholder="Paste the CV link" value="${c&&c.cvLink?esc(c.cvLink):''}"></label>
@@ -1197,23 +1204,27 @@ function vNew(){
 }
 after.new=()=>{
   const f=$('#candForm');
-  const sync=()=>{$('#deptOut').value=DB.positions.find(p=>p.title===f.position.value).dept};
-  f.position.addEventListener('change',sync); f.entity.addEventListener('change',sync); if(!EDIT) sync();
+  const sync=()=>{const p=DB.positions.find(p=>p.title.toLowerCase()===f.position.value.trim().toLowerCase());if(p&&!f.dept.value.trim())f.dept.value=p.dept};
+  f.position.addEventListener('change',sync);
   f.addEventListener('submit',e=>{
     e.preventDefault(); const fd=new FormData(f); const errs=[];
     if(!fd.get('name').trim()) errs.push('Full name');
+    if(!fd.get('position').trim()) errs.push('Job title');
+    if(!fd.get('dept').trim()) errs.push('Department');
     if(fd.get('years')==='') errs.push('Years of experience');
+    if(fd.get('notice')!==''&&(Number(fd.get('notice'))<1||Number(fd.get('notice'))>100)) errs.push('a notice period between 1 and 100 days');
     const file=f.cv.files[0];
     if(!EDIT&&!file&&!fd.get('cvlink').trim()) errs.push('CV attachment or CV link');
     if(file&&file.size>5*1024*1024) errs.push('a CV under 5 MB');
     const dup=DB.candidates.find(x=>x.name.trim().toLowerCase()===fd.get('name').trim().toLowerCase()&&x.position===fd.get('position')&&x.id!==EDIT);
     if(errs.length||dup){const b=$('#formErr');b.hidden=false;b.textContent=errs.length?'Complete the required fields: '+errs.join(', ')+'.':`Possible duplicate: ${dup.name} is already registered for ${dup.position} (${dup.id}).`;return}
     const arr=p=>[0,1,2,3,4,5].map(i=>fd.get(p+i)).filter(x=>x&&x.trim());
-    const data={name:fd.get('name').trim(),entity:fd.get('entity'),position:fd.get('position'),dept:DB.positions.find(p=>p.title===fd.get('position')).dept,level:fd.get('level'),years:Number(fd.get('years')),gradYear:fd.get('gradYear')?Number(fd.get('gradYear')):'',employer:fd.get('employer'),english:fd.get('english'),notice:fd.get('notice'),registered:fd.get('registered'),summary:fd.get('summary'),highlights:arr('hl'),strengths:arr('st'),qualifications:arr('ql')};
+    const data={name:fd.get('name').trim(),entity:fd.get('entity'),position:fd.get('position').trim(),dept:fd.get('dept').trim(),level:fd.get('level'),years:Number(fd.get('years')),gradYear:fd.get('gradYear')?Number(fd.get('gradYear')):'',employer:fd.get('employer'),english:fd.get('english'),notice:fd.get('notice')===''?'':Number(fd.get('notice')),registered:fd.get('registered'),summary:fd.get('summary'),highlights:arr('hl'),strengths:arr('st'),qualifications:arr('ql')};
     let id=EDIT;
     data.cvLink=fd.get('cvlink').trim();
     if(!EDIT){const yr=data.registered.slice(0,4);const pre=data.entity+'-'+yr+'-';const n=Math.max(0,...DB.candidates.filter(x=>x.id.startsWith(pre)).map(x=>Number(x.id.slice(pre.length))||0))+1;id=pre+String(n).padStart(4,'0')}
     const finish=up=>{
+      if(!DB.positions.some(p=>p.title.toLowerCase()===data.position.toLowerCase()))DB.positions.push({title:data.position,dept:data.dept});
       if(EDIT){Object.assign(DB.candidates.find(x=>x.id===EDIT),data,up||{})}
       else DB.candidates.push({id,...data,cv:'(link)',email:'',...(up||{})});
       save(); const wasEdit=EDIT; EDIT=null; go('candidate',id); toast(wasEdit?'Candidate updated':'Candidate registered as '+id)};
@@ -1274,10 +1285,11 @@ function vEvaluate(){
           <div><h3 style="border:0;padding:0;margin-bottom:8px">Turning the answer into a rating</h3>
             <table class="mini rubric"><tbody>${RUBRIC.map(([n,l,d])=>`<tr><td class="num"><b>${n}</b></td><td><b>${l}</b></td><td>${d}</td></tr>`).join('')}</tbody></table></div>
         </div></div>
-      ${iv.type==='HR'&&role()==='hr'?(()=>{const k=DB.comp[c.id]||{};return `<fieldset style="border-color:var(--sky)"><legend>HR details — HR only</legend><div class="grid g3">
-        <label class="field"><span>Notice period</span><select name="hd_notice">${['Immediate','2 weeks','1 month','2 months','3 months'].map(x=>`<option ${c.notice===x?'selected':''}>${x}</option>`).join('')}</select></label>
-        </div>
-        <p class="muted" style="margin:8px 0 0;font-size:12.5px">Current and expected package go in the candidate's Compensation tab (HR only).</p></fieldset>`})():''}
+      ${iv.type==='HR'&&role()==='hr'?(()=>{const k=DB.comp[c.id]||{};const pay=me().seeSalary!==false;return `<fieldset style="border-color:var(--sky)"><legend>HR details · HR only</legend><div class="grid g3">
+        <label class="field"><span>Notice period (days)</span><input type="number" min="1" max="100" name="hd_notice" value="${/^[0-9]+$/.test(String(c.notice||''))?c.notice:''}" placeholder="1 – 100"></label>
+        ${pay?`<label class="field"><span>Current package (monthly)</span><input type="number" min="0" name="hd_current" value="${esc(k.current??'')}"></label>
+        <label class="field"><span>Expected package (monthly)</span><input type="number" min="0" name="hd_expected" value="${esc(k.expected??'')}"></label>`:''}
+        </div>${pay?'<p class="muted" style="margin:8px 0 0;font-size:12.5px">Packages are saved to the candidate’s Compensation tab. Interviewers never see them.</p>':''}</fieldset>`})():''}
       ${comps.map(cp=>`<div class="panel"><div class="panel-head"><h2>${esc(cp)}</h2><span class="muted" style="font-size:12.5px">weight ${sum(qs.filter(q=>(q.grp||q.comp)===cp).map(q=>q.weight))}</span></div>
         ${qs.map((q,i)=>(q.grp||q.comp)!==cp?'':`<div class="q"><div><div class="qc">${esc(q.comp)}</div><div class="qt">${esc(q.text)}</div><div class="qm"><span class="mono">${q.qid}</span> · weight ${q.weight}</div>
           ${(q.listen||[]).length?`<div class="listen"><b>Listen for</b><ul>${q.listen.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></div>`:''}</div>
@@ -1328,7 +1340,8 @@ after.evaluate=()=>{
   const persist=(submit)=>{const d=collect();
     if(submit){const miss=[];if(d.ratings.some(r=>!r.rating))miss.push('a rating for every question');if(!d.rec4)miss.push('the recommendation');if(!d.overall.trim())miss.push('overall feedback');
       if(miss.length){const b=$('#evErr');b.hidden=false;b.textContent='Before submitting, add '+miss.join(', ')+'.';return}}
-    if(f.elements['hd_notice']){const fd2=new FormData(f);c.notice=fd2.get('hd_notice');}
+    if(f.elements['hd_notice']){const fd2=new FormData(f);const nd=fd2.get('hd_notice');if(nd!=='')c.notice=Math.max(1,Math.min(100,Number(nd)||1));
+      if(f.elements['hd_current']){const cu=fd2.get('hd_current'),ex=fd2.get('hd_expected');if(cu!==''||ex!==''||DB.comp[c.id]){const k=DB.comp[c.id]||{currency:ent(c.entity).currency,payments:12,allowances:[]};k.current=cu===''?'':Number(cu);k.expected=ex===''?'':Number(ex);DB.comp[c.id]=k}}}
     const rec={...(existing||{id:'EV'+Date.now().toString(36),interviewId:iv.id,candId:c.id,type:iv.type,interviewerId:me().id}),...d,submittedAt:submit?TODAY:null};
     if(existing) Object.assign(existing,rec); else DB.evaluations.push(rec);
     save(); if(submit){go('candidate',c.id,'interviews');toast('Evaluation submitted — score '+f1(evalScore(rec)))}else toast('Draft saved');};
@@ -1387,13 +1400,11 @@ function vSettings(){
   <form class="panel" id="cfgForm"><h2>Scoring methodology</h2>
     <div class="grid g4">
       <label class="field"><span>Question scoring</span><select name="method"><option value="weighted" ${k.method==='weighted'?'selected':''}>Weighted by question weight</option><option value="simple" ${k.method==='simple'?'selected':''}>Simple average</option></select></label>
-      <label class="field"><span>HR share of combined score (%)</span><input type="number" min="0" max="100" name="hrWeight" value="${k.hrWeight}"></label>
-      <label class="field"><span>Technical share (%)</span><input type="number" min="0" max="100" name="techWeight" value="${k.techWeight}"></label>
       <label class="field"><span>Pass mark · Hire (out of 5)</span><input type="number" step="0.1" min="1" max="5" name="passMark" value="${k.passMark}"></label>
       <label class="field"><span>Strong hire from</span><input type="number" step="0.1" min="1" max="5" name="strongMark" value="${k.strongMark}"></label>
       <label class="field"><span>Further interview from</span><input type="number" step="0.1" min="1" max="5" name="furtherMark" value="${k.furtherMark}"></label>
     </div>
-    <div class="lock-note" style="margin-top:12px"><span><b>How it works:</b> each evaluation = Σ(rating × question weight) ÷ Σ weights. HR score = average of HR evaluations; Technical = average of technical evaluations. Combined = HR × ${k.hrWeight}% + Technical × ${k.techWeight}%, shown only once both interview types are complete.</span></div>
+    <div class="lock-note" style="margin-top:12px"><span><b>How it works:</b> each interview gets its own score, Σ(rating × question weight) ÷ Σ weights, out of 5. HR and technical results are kept separate: the candidate goes to the technical interview only after passing HR (recommendation Hire or Strong hire). The marks below colour the scores and suggest a recommendation to the interviewer.</span></div>
     <div style="margin-top:12px"><button class="btn pri" type="submit">Save scoring</button></div></form>
   <div class="panel"><h2>Sign-in methods</h2>
     <p class="muted" style="margin:6px 0 12px">Choose how people sign in. Keep at least one on. Before switching e-mail codes off, set a password for yourself in Users &amp; access.</p>
@@ -1402,7 +1413,7 @@ function vSettings(){
       <label><input type="checkbox" data-login="loginOtp" ${DB.config.loginOtp!==false?'checked':''}> <b>E-mail code (OTP)</b> · a 6-digit code sent to the user's e-mail at each sign-in</label>
     </div></div>
   <div class="panel"><h2>Positions &amp; departments</h2>
-    <p class="muted" style="margin:6px 0 12px">This list feeds candidate registration and the question bank. A position used by a candidate cannot be removed.</p>
+    <p class="muted" style="margin:6px 0 12px">Job titles are typed freely at registration; this list only gives suggestions and feeds the question bank. A new title typed at registration is added here automatically.</p>
     <div class="tbl-wrap"><table><thead><tr><th>Position</th><th>Department</th><th class="r">Candidates</th><th></th></tr></thead><tbody>
     ${DB.positions.map(p=>{const n=DB.candidates.filter(c=>c.position===p.title).length;return `<tr><td>${esc(p.title)}</td><td>${esc(p.dept)}</td><td class="r num">${n}</td><td class="r">${n?'':`<button class="btn sm danger" type="button" data-pdel="${esc(p.title)}">Remove</button>`}</td></tr>`}).join('')||'<tr><td colspan="4" class="empty">No positions yet.</td></tr>'}
     </tbody></table></div>
@@ -1427,8 +1438,7 @@ function vSettings(){
 }
 after.settings=()=>{
   $('#cfgForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);
-    DB.config={...DB.config,method:fd.get('method'),hrWeight:Number(fd.get('hrWeight'))||0,techWeight:Number(fd.get('techWeight'))||0,passMark:Number(fd.get('passMark'))||3.5,strongMark:Number(fd.get('strongMark'))||4,furtherMark:Number(fd.get('furtherMark'))||3};
-    if(DB.config.hrWeight+DB.config.techWeight===0){DB.config.hrWeight=50;DB.config.techWeight=50}
+    DB.config={...DB.config,method:fd.get('method'),passMark:Number(fd.get('passMark'))||3.5,strongMark:Number(fd.get('strongMark'))||4,furtherMark:Number(fd.get('furtherMark'))||3};
     save();render();toast('Scoring saved — all scores recalculated')});
   document.querySelectorAll('[data-ecolor]').forEach(i=>i.addEventListener('change',e=>{ent(e.target.dataset.ecolor).color=e.target.value;save();render();toast('Brand colour updated')}));
   document.querySelectorAll('[data-elogo]').forEach(i=>i.addEventListener('change',e=>{const file=e.target.files[0];if(!file)return;if(file.size>3000000){toast('Use a logo under 3 MB');return}
@@ -1450,7 +1460,7 @@ function vUsers(){
   const meId=me().id;
   const roleOpts=v=>[['hr','HR Administrator'],['interviewer','Interviewer / Hiring Manager']].map(([k,l])=>`<option value="${k}" ${v===k?'selected':''}>${l}</option>`).join('');
   return `<div class="head"><div><h1>Users &amp; access</h1><p>A person can sign in only if they are listed here and ticked Active. They sign in with their user name, e-mail or mobile and the password you set${DB.config.loginOtp!==false?', or with a one-time code sent to their e-mail':''}. Interviewers see only the interviews you assign to them. Changes apply at once: untick Active and that person is signed out on their next click.</p></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>User name</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Salaries</th><th>Active</th><th></th></tr></thead><tbody>
+  <div class="tbl-wrap"><table><thead><tr><th>Full name · shown</th><th>Username · to sign in</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Salaries</th><th>Active</th><th></th></tr></thead><tbody>
   ${DB.users.map(u=>{const self=u.id===meId,dis=self?'disabled title="You cannot change your own access. Ask another HR user."':'';
     return `<tr style="${u.active===false?'opacity:.55':''}"><td><input type="text" data-uf="${u.id}|name" value="${esc(u.name)}" aria-label="Name">${u.sample?'<div class="muted" style="font-size:11px">Sample user</div>':''}</td>
     <td><input type="text" data-uf="${u.id}|username" value="${esc(u.username||'')}" placeholder="e.g. sherif.kamal" aria-label="User name" autocapitalize="off"></td>
@@ -1464,15 +1474,15 @@ function vUsers(){
     <td>${self?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`}).join('')}
   </tbody></table></div>
   <form class="panel" id="userForm" novalidate autocomplete="off"><h2>Add user</h2><div class="grid g4">
-    <label class="field"><span>Name <i>*</i></span><input type="text" name="name"></label>
-    <label class="field"><span>User name</span><input type="text" name="username" placeholder="e.g. sherif.kamal" autocapitalize="off"></label>
+    <label class="field"><span>Full name <i>*</i> · shown on screens</span><input type="text" name="name" placeholder="e.g. Sherif Kamal"></label>
+    <label class="field"><span>Username · typed to sign in</span><input type="text" name="username" placeholder="e.g. sherif.kamal" autocapitalize="off"></label>
     <label class="field"><span>Company e-mail</span><input type="email" name="email" placeholder="name@saffly.com"></label>
     <label class="field"><span>Mobile</span><input type="text" name="mobile" placeholder="01xxxxxxxxx" inputmode="tel"></label>
     <label class="field"><span>Title</span><input type="text" name="title"></label>
     <label class="field"><span>Role</span><select name="role">${roleOpts('interviewer')}</select></label>
     <label class="field"><span>Password</span><input type="text" name="password" autocomplete="new-password" placeholder="8+ letters and numbers"></label>
     <div style="display:flex;align-items:end"><button type="button" class="btn sm" data-act="gen-pw">Suggest a password</button></div>
-  </div><p class="muted" style="margin:10px 0 0;font-size:12.5px">Give at least one of user name, e-mail or mobile. Send the password to the person yourself (WhatsApp or in person). It is stored encrypted and cannot be shown again; you can only reset it.</p>
+  </div><p class="muted" style="margin:10px 0 0;font-size:12.5px"><b>Full name</b> is what everyone sees on screens and in the new hire pack. <b>Username</b> is the short name the person types to sign in, for example sherif.kamal. They can also sign in with their e-mail or mobile. Give at least one of user name, e-mail or mobile. Send the password to the person yourself (WhatsApp or in person). It is stored encrypted and cannot be shown again; you can only reset it.</p>
   <div style="margin-top:12px"><button class="btn pri" type="submit">Add user</button></div></form>
   <form class="panel" id="pwForm" novalidate autocomplete="off"><h2>Set or reset a password</h2><div class="grid g4">
     <label class="field"><span>User</span><select name="id">${DB.users.filter(u=>u.active!==false&&u.id!==me().id).map(u=>`<option value="${u.id}">${esc(u.name)}${u.username?' ('+esc(u.username)+')':''}</option>`).join('')}</select></label>
