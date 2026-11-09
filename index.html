@@ -670,7 +670,12 @@ const f1=n=>n==null?'—':n.toFixed(2);
 const money=(n,c)=>n==null||n===''?'—':c+' '+Number(n).toLocaleString('en-US');
 const fdate=d=>{if(!d)return '—';const [y,m,dd]=d.split('-');return dd+'/'+m+'/'+y};
 const me=()=>DB.users.find(u=>u.id===DB.currentUser)||DB.users[0];
-const role=()=>me().role;
+const PERMS=[['dashboard','Dashboard','See the dashboard numbers and charts'],['candidates','All candidates','See every candidate, CV and interview feedback'],['manage','Run recruitment','Register candidates, schedule interviews, change dates'],['decision','Final decision','Record the final decision and print the new hire pack'],['salaries','Salaries','See and edit packages and offers'],['settings','Settings','Question bank, scoring, job titles, entities, sign-in'],['users','Users','Add users, set passwords and permissions']];
+const PRESETS={admin:['Admin',['dashboard','candidates','manage','decision','salaries','settings','users']],hr_ops:['HR',['dashboard','candidates','manage','decision','salaries']],hr_interviewer:['HR interviewer',[]],interviewer:['Technical interviewer',[]],viewer:['Manager · dashboard only',['dashboard']],custom:['Custom',null]};
+const permsOf=u=>Array.isArray(u.perms)?u.perms:(u.role==='hr'||u.role==='admin')?PRESETS.admin[1].slice():[];
+const can=p=>permsOf(me()).includes(p);
+const roleLabel=u=>u.role==='hr'?'Admin':(PRESETS[u.role]||PRESETS.interviewer)[0];
+const role=()=>can('manage')?'hr':'interviewer';
 const ent=id=>DB.entities.find(e=>e.id===id)||{name:id,color:'#888',currency:''};
 const uname=id=>(DB.users.find(u=>u.id===id)||{name:'—'}).name;
 function toast(m){const t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>t.hidden=true,2600)}
@@ -684,15 +689,15 @@ const API={
   candidates(){
     const r=role(), u=me();
     let list=DB.candidates;
-    if(r==='interviewer'){const mine=new Set(DB.interviews.filter(i=>i.interviewerId===u.id).map(i=>i.candId));list=list.filter(c=>mine.has(c.id));}
+    if(!(can('candidates')||can('manage')||can('decision')||can('dashboard'))){const mine=new Set(DB.interviews.filter(i=>i.interviewerId===u.id).map(i=>i.candId));list=list.filter(c=>mine.has(c.id));}
     return list.map(c=>({...c}));
   },
   candidate(id){return API.candidates().find(c=>c.id===id)},
-  compensation(id){ if(role()!=='hr') throw new Error('403 — compensation is restricted to HR Administrators'); return DB.comp[id]; },
+  compensation(id){ if(!can('salaries')) throw new Error('You do not have the Salaries permission.'); return DB.comp[id]; },
   evaluations(candId){
     const r=role(), u=me();
     let evs=DB.evaluations.filter(e=>e.candId===candId);
-    if(r==='interviewer'){
+    if(!(can('candidates')||can('manage')||can('decision'))){
       const ownTechDone=evs.some(e=>e.type==='Technical'&&e.interviewerId===u.id&&e.submittedAt);
       evs=evs.filter(e=>e.interviewerId===u.id||(e.submittedAt&&(e.type==='HR'||ownTechDone)));
     } else evs=evs.filter(e=>e.submittedAt||e.interviewerId===u.id);
@@ -749,21 +754,27 @@ const scoreChip=s=>s==null?'<span class="muted">—</span>':`<span class="pill $
 
 
 let VIEW={name:'',id:null,tab:'profile'};
-const NAV={
-  hr:[['dashboard','Dashboard'],['candidates','Candidates'],['interviews','Interviews'],['new','Register candidate'],['_','Configuration'],['questions','Question bank'],['settings','Scoring & positions'],['users','Users & access'],['_','Me'],['account','My account']],
-  interviewer:[['my','My interviews'],['candidates','My candidates'],['_','Me'],['account','My account']]
-};
+function navFor(){const L=[];const u=me();
+  const iv=['hr_interviewer','interviewer','custom'].includes(u.role)||DB.interviews.some(i=>i.interviewerId===u.id);
+  const all=can('candidates')||can('manage')||can('decision');
+  if(can('dashboard'))L.push(['dashboard','Dashboard']);
+  if(iv)L.push(['my','My interviews']);
+  if(all)L.push(['candidates','Candidates']);else if(iv)L.push(['candidates','My candidates']);
+  if(can('manage'))L.push(['interviews','Interviews'],['new','Register candidate']);
+  const cfg=[];if(can('settings'))cfg.push(['questions','Question bank'],['settings','Scoring & positions']);if(can('users'))cfg.push(['users','Users & access']);
+  if(cfg.length)L.push(['_','Configuration'],...cfg);
+  L.push(['_','Me'],['account','My account']);return L}
 function go(name,id=null,tab='profile'){VIEW={name,id,tab};render();window.scrollTo(0,0)}
-function allowed(name){return NAV[role()].some(n=>n[0]===name)||['candidate','evaluate','pack'].includes(name)}
+function allowed(name){return navFor().some(n=>n[0]===name)||['evaluate'].includes(name)||(['candidate','pack'].includes(name)&&navFor().some(n=>n[0]==='candidates'))}
 
 function renderNav(){
   const pend=DB.interviews.filter(i=>i.interviewerId===me().id&&!isDone(i)).length;
-  $('#nav').innerHTML=NAV[role()].map(([k,l])=>k==='_'?`<div class="grp">${l}</div>`:
+  $('#nav').innerHTML=navFor().map(([k,l])=>k==='_'?`<div class="grp">${l}</div>`:
     `<button type="button" data-nav="${k}" class="${VIEW.name===k?'on':''}">${l}${k==='my'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')+`<div class="foot">SAFfly Egypt<br>A Green Sky Capital company<br><br>HR only · Confidential</div>`;
 }
-function renderWho(){const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+(u.role==='hr'?'HR Administrator':'Interviewer')+'</small>'}
+function renderWho(){const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+esc(roleLabel(u))+'</small>'}
 function render(){
-  if(!VIEW.name||!allowed(VIEW.name)) VIEW={name:NAV[role()][0][0],id:null,tab:'profile'};
+  if(!VIEW.name||!allowed(VIEW.name)) VIEW={name:navFor()[0][0],id:null,tab:'profile'};
   renderNav(); renderWho();
   const v={pack:vPack,dashboard:vDashboard,candidates:vCandidates,candidate:vCandidate,new:vNew,interviews:vInterviews,my:vMy,evaluate:vEvaluate,questions:vQuestions,settings:vSettings,users:vUsers,design:vDesign,account:vAccount}[VIEW.name];
   const EB={dashboard:'HR overview',candidates:role()==='management'?'Recruitment progress':'Talent pipeline',candidate:'Candidate file',pack:'New hire approval pack',new:'Candidate registration',interviews:'Interview schedule',my:'Interviewer workspace',evaluate:'Interview evaluation',questions:'Configuration',settings:'Configuration',users:'Access control',design:'Implementation proposal',account:'Your account'}[VIEW.name]||'';
@@ -860,8 +871,8 @@ let CF={q:'',entity:'',status:''};
 function vCandidates(){
   const r=role();
   const list=API.candidates().filter(c=>(!CF.entity||c.entity===CF.entity)&&(!CF.status||status(c)===CF.status)&&(!CF.q||(c.name+c.id+c.position).toLowerCase().includes(CF.q.toLowerCase())));
-  return `<div class="head"><div><h1>${r==='interviewer'?'My candidates':r==='management'?'Candidate progress':'Candidates'}</h1>
-    <p>${r==='interviewer'?'Only candidates with an interview assigned to you are listed.':'Click a row to open the candidate profile.'}</p></div>
+  return `<div class="head"><div><h1>${(can('candidates')||can('manage')||can('decision'))?'Candidates':'My candidates'}</h1>
+    <p>${!(can('candidates')||can('manage')||can('decision'))?'Only candidates with an interview assigned to you are listed.':'Click a row to open the candidate profile.'}</p></div>
     ${r==='hr'?'<button class="btn pri" type="button" data-nav="new">Register candidate</button>':''}</div>
   <div class="panel"><div class="filters">
     <label class="field" style="flex:2 1 220px"><span>Search</span><input type="text" id="cf-q" placeholder="Name, ID or position" value="${esc(CF.q)}"></label>
@@ -883,7 +894,7 @@ function vCandidate(){
   const c=API.candidate(VIEW.id);
   if(!c) return `<div class="panel"><h2>Not available</h2><p class="muted">This candidate is not assigned to you, or does not exist.</p></div>`;
   const r=role(), e=ent(c.entity), s=candScores(c.id);
-  const canPay=()=>role()==='hr'&&me().seeSalary!==false;
+  const canPay=()=>can('salaries');
   const tabs=[['profile','Profile'],...(canPay()?[['comp','Compensation 🔒']]:[]),['interviews','Interviews & feedback'],['decision','Result &amp; decision']];
   if(!tabs.some(t=>t[0]===VIEW.tab)) VIEW.tab='profile';
   let body='';
@@ -899,7 +910,7 @@ function vCandidate(){
       <div class="meta"><div class="eyebrow">${esc(c.position)} · ${esc(c.level)}</div><h1>${esc(c.name)}</h1>
         <div class="ent-line">${esc(e.name)} · ${esc(e.city&&e.city!==e.country?e.city+', ':'')}${esc(e.country)}</div>
         <p><span class="mono">${c.id}</span> · ${esc(c.dept)}</p></div>
-      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">${pill(status(c))}${role()!=='interviewer'?`<button class="btn pri sm" type="button" data-pack="${c.id}">New hire pack</button>`:''}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">${pill(status(c))}${can('decision')?`<button class="btn pri sm" type="button" data-pack="${c.id}">New hire pack</button>`:''}</div>
     </div>
     <div class="score-row" style="margin-top:14px">
       <div class="score"><span>HR result</span><b style="font-size:14px">${recChip(c.id,'HR')}</b></div>
@@ -934,7 +945,7 @@ function tabProfile(c){
     <div class="panel"><h3>Experience at a glance</h3><dl class="kv" style="grid-template-columns:1fr 1fr"><div><dt>Years</dt><dd>${esc(c.years)}</dd></div><div><dt>English</dt><dd>${esc(c.english)}</dd></div><div><dt>Current employer</dt><dd>${esc(c.employer)}</dd></div><div><dt>Notice</dt><dd>${esc(c.notice)}</dd></div></dl></div>
   </div>
   <div class="panel"><h2>Professional qualifications</h2><div class="quals">${(c.qualifications.length?c.qualifications:['','','']).map(q=>{if(!q)return '<div class="blank">Not completed</div>';const [a,...b]=q.split(' — ');return `<div><b>${esc(a)}</b>${esc(b.join(' — '))}</div>`}).join('')}</div></div>
-  ${role()==='hr'&&me().seeSalary!==false?'<div class="lock-note"><b>🔒</b><span>Salary details are in the <b>Compensation</b> tab. Only HR Administrators with the Salaries permission can see them; interviewers never receive them.</span></div>':''}`;
+  ${can('salaries')?'<div class="lock-note"><b>🔒</b><span>Salary details are in the <b>Compensation</b> tab. Only HR Administrators with the Salaries permission can see them; interviewers never receive them.</span></div>':''}`;
 }
 function tabComp(c){
   let k; try{k=API.compensation(c.id)}catch(e){return `<div class="panel err">${esc(e.message)}</div>`}
@@ -1046,7 +1057,7 @@ function tabDecision(c){
     ${evs.map(e=>`<tr><td>${esc(uname(e.interviewerId))}</td><td><span class="tag ${e.type==='HR'?'hr':'tech'}">${e.type}</span></td><td class="r">${scoreChip(evalScore(e))}</td><td><b>${esc(e.rec4||'—')}</b></td><td class="muted" style="font-size:12.5px">${esc(e.recommended)} · ${esc(e.outcome)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No submitted evaluations yet.</td></tr>'}
     </tbody></table></div>
 </div>`+resultPanel(c);
-  if(role()!=='hr') return sumBox+`<div class="panel"><h2>Final decision</h2>${d.decision?`<dl class="kv"><div><dt>Decision</dt><dd>${pill(st)}</dd></div><div><dt>Date</dt><dd>${fdate(d.date)}</dd></div><div><dt>Approved by</dt><dd>${esc(d.approvedBy)}</dd></div><div><dt>Notes</dt><dd>${esc(d.notes)}</dd></div></dl>`:'<p class="empty">No final decision recorded yet. HR records it after all interviews.</p>'}</div>`;
+  if(!can('decision')) return sumBox+`<div class="panel"><h2>Final decision</h2>${d.decision?`<dl class="kv"><div><dt>Decision</dt><dd>${pill(st)}</dd></div><div><dt>Date</dt><dd>${fdate(d.date)}</dd></div><div><dt>Approved by</dt><dd>${esc(d.approvedBy)}</dd></div><div><dt>Notes</dt><dd>${esc(d.notes)}</dd></div></dl>`:'<p class="empty">No final decision recorded yet. HR records it after all interviews.</p>'}</div>`;
   return sumBox+`<form class="panel" id="decForm"><h2>Record final hiring decision</h2>
     <div class="grid g3">
       <label class="field"><span>Decision <i>*</i></span><select name="decision" required><option value="">Select…</option>${DECISIONS.map(x=>{const cur=d.decision==='Hire'?'Hired':d.decision==='Do not hire'?'Open position':d.decision;return `<option ${cur===x?'selected':''}>${x}</option>`}).join('')}</select></label>
@@ -1106,7 +1117,7 @@ function vPack(){
     <h3 class="sl-h">Key strengths</h3><div class="sl-str">${st.map(x=>`<div>${x?esc(x):blank('—')}</div>`).join('')}</div>
     <h3 class="sl-h">Professional qualifications</h3><div class="quals">${ql.map(q=>{if(!q)return '<div class="blank">Not completed</div>';const [a,...b]=q.split(' — ');return `<div><b>${esc(a)}</b>${esc(b.join(' — '))}</div>`}).join('')}</div>
     ${foot()}</section>`;
-  if(role()==='hr'&&me().seeSalary!==false&&DB.comp[c.id]&&(DB.comp[c.id].basic||DB.comp[c.id].current||DB.comp[c.id].expected)){
+  if(can('salaries')&&DB.comp[c.id]&&(DB.comp[c.id].basic||DB.comp[c.id].current||DB.comp[c.id].expected)){
     const k=DB.comp[c.id]||{allowances:[],currency:e.currency,payments:12};
     const al=(k.allowances||[]).filter(a=>a.name);const total=(Number(k.basic)||0)+sum(al.map(a=>Number(a.amount)||0));
     const cr=k.gradeMid&&total?total/k.gradeMid*100:null;const pay=k.payments||12;
@@ -1285,11 +1296,11 @@ function vEvaluate(){
           <div><h3 style="border:0;padding:0;margin-bottom:8px">Turning the answer into a rating</h3>
             <table class="mini rubric"><tbody>${RUBRIC.map(([n,l,d])=>`<tr><td class="num"><b>${n}</b></td><td><b>${l}</b></td><td>${d}</td></tr>`).join('')}</tbody></table></div>
         </div></div>
-      ${iv.type==='HR'&&role()==='hr'?(()=>{const k=DB.comp[c.id]||{};const pay=me().seeSalary!==false;return `<fieldset style="border-color:var(--sky)"><legend>HR details · HR only</legend><div class="grid g3">
-        <label class="field"><span>Notice period (days)</span><input type="number" min="1" max="100" name="hd_notice" value="${/^[0-9]+$/.test(String(c.notice||''))?c.notice:''}" placeholder="1 – 100"></label>
-        ${pay?`<label class="field"><span>Current package (monthly)</span><input type="number" min="0" name="hd_current" value="${esc(k.current??'')}"></label>
-        <label class="field"><span>Expected package (monthly)</span><input type="number" min="0" name="hd_expected" value="${esc(k.expected??'')}"></label>`:''}
-        </div>${pay?'<p class="muted" style="margin:8px 0 0;font-size:12.5px">Packages are saved to the candidate’s Compensation tab. Interviewers never see them.</p>':''}</fieldset>`})():''}
+      ${iv.type==='HR'?(()=>{const pk=d.pkg||{};const k=can('salaries')?DB.comp[c.id]||{}:{};const cur=pk.current??k.current??'',exp=pk.expected??k.expected??'';const nd=d.noticeDays??(/^[0-9]+$/.test(String(c.notice||''))?c.notice:'');return `<fieldset style="border-color:var(--sky)"><legend>HR details</legend><div class="grid g3">
+        <label class="field"><span>Notice period (days)</span><input type="number" min="1" max="100" name="hd_notice" value="${esc(nd)}" placeholder="1 – 100"></label>
+        <label class="field"><span>Current package (monthly)</span><input type="number" min="0" name="hd_current" value="${esc(cur)}"></label>
+        <label class="field"><span>Expected package (monthly)</span><input type="number" min="0" name="hd_expected" value="${esc(exp)}"></label>
+        </div><p class="muted" style="margin:8px 0 0;font-size:12.5px">Saved with this HR evaluation and copied to the candidate’s Compensation tab. Only people with the Salaries permission see the packages.</p></fieldset>`})():''}
       ${comps.map(cp=>`<div class="panel"><div class="panel-head"><h2>${esc(cp)}</h2><span class="muted" style="font-size:12.5px">weight ${sum(qs.filter(q=>(q.grp||q.comp)===cp).map(q=>q.weight))}</span></div>
         ${qs.map((q,i)=>(q.grp||q.comp)!==cp?'':`<div class="q"><div><div class="qc">${esc(q.comp)}</div><div class="qt">${esc(q.text)}</div><div class="qm"><span class="mono">${q.qid}</span> · weight ${q.weight}</div>
           ${(q.listen||[]).length?`<div class="listen"><b>Listen for</b><ul>${q.listen.map(l=>`<li>${esc(l)}</li>`).join('')}</ul></div>`:''}</div>
@@ -1340,8 +1351,8 @@ after.evaluate=()=>{
   const persist=(submit)=>{const d=collect();
     if(submit){const miss=[];if(d.ratings.some(r=>!r.rating))miss.push('a rating for every question');if(!d.rec4)miss.push('the recommendation');if(!d.overall.trim())miss.push('overall feedback');
       if(miss.length){const b=$('#evErr');b.hidden=false;b.textContent='Before submitting, add '+miss.join(', ')+'.';return}}
-    if(f.elements['hd_notice']){const fd2=new FormData(f);const nd=fd2.get('hd_notice');if(nd!=='')c.notice=Math.max(1,Math.min(100,Number(nd)||1));
-      if(f.elements['hd_current']){const cu=fd2.get('hd_current'),ex=fd2.get('hd_expected');if(cu!==''||ex!==''||DB.comp[c.id]){const k=DB.comp[c.id]||{currency:ent(c.entity).currency,payments:12,allowances:[]};k.current=cu===''?'':Number(cu);k.expected=ex===''?'':Number(ex);DB.comp[c.id]=k}}}
+    if(f.elements['hd_notice']){const fd2=new FormData(f);const nd=fd2.get('hd_notice'),cu=fd2.get('hd_current'),ex=fd2.get('hd_expected');
+      d.noticeDays=nd===''?'':Math.max(1,Math.min(100,Number(nd)||1));d.pkg={current:cu===''?'':Number(cu),expected:ex===''?'':Number(ex)};}
     const rec={...(existing||{id:'EV'+Date.now().toString(36),interviewId:iv.id,candId:c.id,type:iv.type,interviewerId:me().id}),...d,submittedAt:submit?TODAY:null};
     if(existing) Object.assign(existing,rec); else DB.evaluations.push(rec);
     save(); if(submit){go('candidate',c.id,'interviews');toast('Evaluation submitted — score '+f1(evalScore(rec)))}else toast('Draft saved');};
@@ -1456,76 +1467,74 @@ after.settings=()=>{
 };
 
 
+let UEDIT=null;
+const pwPill=u=>u.hasPw?(u.pwTemp?'<span class="pill p-await">Temporary</span>':'<span class="pill p-good">Set</span>'):'<span class="pill">Not set</span>';
+function userForm(){
+  const u=UEDIT==='new'?{role:'interviewer',perms:[],active:true}:DB.users.find(x=>x.id===UEDIT);if(!u)return '';
+  const self=u.id===me().id, P=permsOf(u), lvl=u.role==='hr'?'admin':(PRESETS[u.role]?u.role:'interviewer'), dis=self?'disabled':'';
+  return `<form class="panel" id="userForm" novalidate autocomplete="off"><div class="panel-head"><h2>${UEDIT==='new'?'Add user':'Edit '+esc(u.name)}</h2><button class="btn ghost sm" type="button" data-act="uclose">Close</button></div>
+  <div class="grid g3">
+    <label class="field"><span>Full name <i>*</i> · shown on screens</span><input type="text" name="name" value="${esc(u.name||'')}" placeholder="e.g. Sherif Kamal"></label>
+    <label class="field"><span>Username · typed to sign in</span><input type="text" name="username" value="${esc(u.username||'')}" placeholder="e.g. sherif.kamal" autocapitalize="off"></label>
+    <label class="field"><span>Job title</span><input type="text" name="title" value="${esc(u.title||'')}"></label>
+    <label class="field"><span>Company e-mail</span><input type="email" name="email" value="${esc(u.email||'')}" placeholder="name@saffly.com"></label>
+    <label class="field"><span>Mobile</span><input type="text" name="mobile" value="${esc(u.mobile||'')}" placeholder="01xxxxxxxxx" inputmode="tel"></label>
+    ${self?'<div class="field"><span>Password</span><div class="muted" style="font-size:13px;padding-top:8px">Change your own password from My account.</div></div>':`<div class="field"><span>${UEDIT==='new'?'Password':'New password · leave empty to keep'}</span><div style="display:flex;gap:6px"><input type="text" name="password" autocomplete="new-password" placeholder="8+ letters and numbers" style="flex:1;min-width:0"><button type="button" class="btn sm" data-act="gen-pw">Suggest</button></div></div>`}
+  </div>
+  <div class="grid g3" style="margin-top:14px;align-items:end">
+    <label class="field"><span>Access level</span><select name="level" ${dis}>${Object.entries(PRESETS).map(([k,v])=>`<option value="${k}" ${lvl===k?'selected':''}>${v[0]}</option>`).join('')}</select></label>
+    <div class="choice"><label><input type="checkbox" name="active" ${u.active!==false?'checked':''} ${dis}> Active · can sign in</label></div>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:12px">${PERMS.map(([p,l,dd])=>`<label style="display:flex;gap:8px;align-items:flex-start;border:1px solid var(--line);border-radius:6px;padding:8px 10px;cursor:pointer"><input type="checkbox" name="perm" value="${p}" ${P.includes(p)?'checked':''} ${dis}><span><b>${l}</b><br><span class="muted" style="font-size:12px">${dd}</span></span></label>`).join('')}</div>
+  <p class="muted" style="font-size:12.5px;margin:10px 0 0">${self?'You cannot change your own access. Ask another admin. ':''}Everyone can always fill the interviews assigned to them. Give at least one of username, e-mail or mobile, and send the password to the person yourself.</p>
+  <div style="margin-top:12px"><button class="btn pri" type="submit">${UEDIT==='new'?'Add user':'Save changes'}</button></div></form>`;
+}
 function vUsers(){
-  const meId=me().id;
-  const roleOpts=v=>[['hr','HR Administrator'],['interviewer','Interviewer / Hiring Manager']].map(([k,l])=>`<option value="${k}" ${v===k?'selected':''}>${l}</option>`).join('');
-  return `<div class="head"><div><h1>Users &amp; access</h1><p>A person can sign in only if they are listed here and ticked Active. They sign in with their user name, e-mail or mobile and the password you set${DB.config.loginOtp!==false?', or with a one-time code sent to their e-mail':''}. Interviewers see only the interviews you assign to them. Changes apply at once: untick Active and that person is signed out on their next click.</p></div></div>
-  <div class="tbl-wrap"><table><thead><tr><th>Full name · shown</th><th>Username · to sign in</th><th>Company e-mail</th><th>Mobile</th><th>Title</th><th>Role</th><th>Password</th><th>Salaries</th><th>Active</th><th></th></tr></thead><tbody>
-  ${DB.users.map(u=>{const self=u.id===meId,dis=self?'disabled title="You cannot change your own access. Ask another HR user."':'';
-    return `<tr style="${u.active===false?'opacity:.55':''}"><td><input type="text" data-uf="${u.id}|name" value="${esc(u.name)}" aria-label="Name">${u.sample?'<div class="muted" style="font-size:11px">Sample user</div>':''}</td>
-    <td><input type="text" data-uf="${u.id}|username" value="${esc(u.username||'')}" placeholder="e.g. sherif.kamal" aria-label="User name" autocapitalize="off"></td>
-    <td><input type="email" data-uf="${u.id}|email" value="${esc(u.email||'')}" placeholder="name@saffly.com" aria-label="E-mail"></td>
-    <td><input type="text" data-uf="${u.id}|mobile" value="${esc(u.mobile||'')}" placeholder="01xxxxxxxxx" aria-label="Mobile" inputmode="tel" style="min-width:120px"></td>
-    <td><input type="text" data-uf="${u.id}|title" value="${esc(u.title||'')}" aria-label="Title"></td>
-    <td><select data-uf="${u.id}|role" aria-label="Role" ${dis}>${roleOpts(u.role)}</select></td>
-    <td style="white-space:nowrap">${u.hasPw?(u.pwTemp?'<span class="pill p-await">Temporary</span>':'<span class="pill p-good">Set</span>'):'<span class="pill">Not set</span>'}</td>
-    <td>${u.role==='hr'?`<input type="checkbox" data-uf="${u.id}|seeSalary" ${u.seeSalary!==false?'checked':''} aria-label="Can see salaries" ${dis}>`:'<span class="muted">—</span>'}</td>
-    <td><input type="checkbox" data-uf="${u.id}|active" ${u.active!==false?'checked':''} aria-label="Active" ${dis}></td>
-    <td>${self?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`}).join('')}
+  const meId=me().id, keys=Object.keys(PRESETS).filter(k=>k!=='custom');
+  return `<div class="head"><div><h1>Users &amp; access</h1><p>Pick an access level for each person, or tick the permissions one by one. Everyone can always fill the interviews assigned to them.</p></div><button class="btn pri" type="button" data-uedit="new">Add user</button></div>
+  ${UEDIT?userForm():''}
+  <div class="tbl-wrap"><table><thead><tr><th>Full name</th><th>Username</th><th>Access</th><th>Password</th><th>Status</th><th></th></tr></thead><tbody>
+  ${DB.users.map(u=>`<tr style="${u.active===false?'opacity:.55':''}"><td><b>${esc(u.name)}</b><div class="muted" style="font-size:12px">${esc(u.title||'')}${u.sample?' · sample user':''}</div></td><td class="mono">${esc(u.username||'—')}</td>
+    <td>${esc(roleLabel(u))}<div class="muted" style="font-size:11.5px">${permsOf(u).length?permsOf(u).map(p=>PERMS.find(x=>x[0]===p)[1]).join(' · '):'Assigned interviews only'}</div></td>
+    <td>${pwPill(u)}</td><td>${u.active!==false?'<span class="pill p-good">Active</span>':'<span class="pill">Off</span>'}</td>
+    <td class="r" style="white-space:nowrap"><button class="btn sm" type="button" data-uedit="${u.id}">Edit</button> ${u.id===meId?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`).join('')}
   </tbody></table></div>
-  <form class="panel" id="userForm" novalidate autocomplete="off"><h2>Add user</h2><div class="grid g4">
-    <label class="field"><span>Full name <i>*</i> · shown on screens</span><input type="text" name="name" placeholder="e.g. Sherif Kamal"></label>
-    <label class="field"><span>Username · typed to sign in</span><input type="text" name="username" placeholder="e.g. sherif.kamal" autocapitalize="off"></label>
-    <label class="field"><span>Company e-mail</span><input type="email" name="email" placeholder="name@saffly.com"></label>
-    <label class="field"><span>Mobile</span><input type="text" name="mobile" placeholder="01xxxxxxxxx" inputmode="tel"></label>
-    <label class="field"><span>Title</span><input type="text" name="title"></label>
-    <label class="field"><span>Role</span><select name="role">${roleOpts('interviewer')}</select></label>
-    <label class="field"><span>Password</span><input type="text" name="password" autocomplete="new-password" placeholder="8+ letters and numbers"></label>
-    <div style="display:flex;align-items:end"><button type="button" class="btn sm" data-act="gen-pw">Suggest a password</button></div>
-  </div><p class="muted" style="margin:10px 0 0;font-size:12.5px"><b>Full name</b> is what everyone sees on screens and in the new hire pack. <b>Username</b> is the short name the person types to sign in, for example sherif.kamal. They can also sign in with their e-mail or mobile. Give at least one of user name, e-mail or mobile. Send the password to the person yourself (WhatsApp or in person). It is stored encrypted and cannot be shown again; you can only reset it.</p>
-  <div style="margin-top:12px"><button class="btn pri" type="submit">Add user</button></div></form>
-  <form class="panel" id="pwForm" novalidate autocomplete="off"><h2>Set or reset a password</h2><div class="grid g4">
-    <label class="field"><span>User</span><select name="id">${DB.users.filter(u=>u.active!==false&&u.id!==me().id).map(u=>`<option value="${u.id}">${esc(u.name)}${u.username?' ('+esc(u.username)+')':''}</option>`).join('')}</select></label>
-    <label class="field"><span>New password</span><input type="text" name="password" autocomplete="new-password" placeholder="8+ letters and numbers"></label>
-    <div style="display:flex;gap:8px;align-items:end"><button type="button" class="btn sm" data-act="gen-pw">Suggest</button><button class="btn pri" type="submit">Save password</button></div>
-  </div></form>
-  <div class="panel"><h2>Permission matrix</h2><div class="tbl-wrap"><table class="matrix"><thead><tr><th>Capability</th><th>HR Admin</th><th>Interviewer</th></tr></thead><tbody>
-  ${[['Register & edit candidates',1,0],['View candidate profile and CV',1,'Assigned only'],['Schedule interviews',1,0],['Submit own evaluation',1,1],['View HR interview feedback',1,'Assigned only'],['View other technical feedback',1,'After own submit'],['Record final decision',1,0],['Dashboard',1,0],['Manage questions, scoring, users, passwords',1,0],['Open the Google Sheet','Owner only','No'],['Salaries (Compensation tab)','If ticked in Salaries',0]]
-    .map(([l,...v])=>`<tr><td>${l}</td>${v.map(x=>x===1?'<td class="yes">✓</td>':x===0?'<td class="no">✕</td>':`<td style="font-size:12.5px">${x}</td>`).join('')}</tr>`).join('')}
-  </tbody></table></div></div>`;
+  <div class="panel"><h2>Access levels</h2><div class="tbl-wrap"><table class="matrix"><thead><tr><th>Permission</th>${keys.map(k=>`<th>${PRESETS[k][0]}</th>`).join('')}</tr></thead><tbody>
+  ${PERMS.map(([p,l,dd])=>`<tr><td><b>${l}</b><div class="muted" style="font-size:12px">${dd}</div></td>${keys.map(k=>PRESETS[k][1].includes(p)?'<td class="yes">✓</td>':'<td class="no">✕</td>').join('')}</tr>`).join('')}
+  <tr><td><b>Fill assigned interviews</b><div class="muted" style="font-size:12px">Only the interviews assigned to them</div></td>${keys.map(()=>'<td class="yes">✓</td>').join('')}</tr>
+  </tbody></table></div><p class="muted" style="margin:10px 0 0;font-size:12.5px">Keep at least two admins, so access never depends on one person.</p></div>`;
 }
 const EMAIL_RE=/^[^ @<>()]+@[^ @<>()]+[.][a-z]{2,}$/i;
 const PW_OK=p=>p&&p.length>=8&&/[A-Za-z]/.test(p)&&/[0-9]/.test(p);
 function genPw(){const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ',d='23456789',r=n=>{const x=new Uint32Array(1);crypto.getRandomValues(x);return x[0]%n};
   let s='';for(let i=0;i<6;i++)s+=a[r(a.length)];for(let i=0;i<3;i++)s+=d[r(d.length)];return s}
 after.users=()=>{
-  document.querySelectorAll('[data-uf]').forEach(el=>el.addEventListener('change',e=>{const [id,f]=e.target.dataset.uf.split('|');const u=DB.users.find(x=>x.id===id);
-    let v=e.target.type==='checkbox'?e.target.checked:e.target.value.trim();
-    if(f==='email'){v=v.toLowerCase();if(v&&!EMAIL_RE.test(v)){toast('Check the e-mail address');return} if(v&&DB.users.some(x=>x.id!==id&&(x.email||'')===v)){toast('This e-mail is already used');return}}
-    if(f==='username'){v=v.toLowerCase().replace(/ +/g,'.');if(/@/.test(v)){toast('A user name cannot contain @');return} if(v&&DB.users.some(x=>x.id!==id&&(x.username||'')===v)){toast('This user name is already used');return}}
-    if(f==='name'&&!v){toast('The name cannot be empty');return}
-    u[f]=v;save();render();toast('Saved')}));
-  $('#userForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);
-    const name=fd.get('name').trim(),email=fd.get('email').trim().toLowerCase(),username=fd.get('username').trim().toLowerCase().replace(/ +/g,'.'),mobile=fd.get('mobile').trim(),pw=fd.get('password');
-    if(!name){toast('Add the name');return} if(!email&&!username&&!mobile){toast('Add a user name, e-mail or mobile');return}
-    if(email&&!EMAIL_RE.test(email)){toast('Check the e-mail address');return}
-    if(email&&DB.users.some(x=>(x.email||'')===email)){toast('This e-mail is already a user');return}
-    if(username&&DB.users.some(x=>(x.username||'')===username)){toast('This user name is already used');return}
-    if(pw&&!PW_OK(pw)){toast('Password: at least 8 characters with letters and numbers');return}
-    if(!pw&&DB.config.loginOtp===false){toast('E-mail codes are off, so give this user a password');return}
-    if(!pw&&!email){toast('Without an e-mail this user needs a password');return}
-    if(SYNCING){toast('Saving… try again in a second');return}
-    const id='u'+Date.now().toString(36);
-    DB.users.push({id,name,username,email,mobile,title:fd.get('title'),entity:(DB.entities[0]||{}).id||'SFE',role:fd.get('role'),active:true});
-    SYNCING=true;busy(true);
-    call('sync',diff()).then(d=>{setData(d);return pw?call('setPassword',{id,password:pw}):d}).then(d=>{setData(d);render();toast('User added — they can sign in now')})
-      .catch(err=>{toast('Not saved: '+err.message);refresh()}).finally(()=>{SYNCING=false;busy(false)})});
+  document.querySelectorAll('[data-uedit]').forEach(b=>b.addEventListener('click',()=>{UEDIT=b.dataset.uedit;render();window.scrollTo(0,0)}));
   document.querySelectorAll('[data-udel]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.udel;
     if(Date.now()-(b._arm||0)>3000){b._arm=Date.now();b.textContent='Click again';setTimeout(()=>{b.textContent='Delete'},3000);return}
-    const u=DB.users.find(x=>x.id===id);DB.users=DB.users.filter(x=>x.id!==id);save();render();toast((u?u.name:'User')+' deleted')}));
-  $('#pwForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);const pw=fd.get('password');
-    if(!PW_OK(pw)){toast('Password: at least 8 characters with letters and numbers');return}
-    busy(true);call('setPassword',{id:fd.get('id'),password:pw}).then(d=>{setData(d);render();toast('Temporary password saved. Send it to the person; they choose their own at first sign-in.')}).catch(err=>toast(err.message)).finally(()=>busy(false))});
+    const u=DB.users.find(x=>x.id===id);DB.users=DB.users.filter(x=>x.id!==id);if(UEDIT===id)UEDIT=null;save();render();toast((u?u.name:'User')+' deleted')}));
+  const f=$('#userForm'); if(!f) return;
+  const boxes=()=>[...f.querySelectorAll('[name=perm]')];
+  f.level.addEventListener('change',()=>{const pr=PRESETS[f.level.value][1];if(pr)boxes().forEach(x=>x.checked=pr.includes(x.value))});
+  boxes().forEach(x=>x.addEventListener('change',()=>{const sel=boxes().filter(y=>y.checked).map(y=>y.value).sort().join();const cur=PRESETS[f.level.value][1];
+    if(cur&&cur.slice().sort().join()===sel)return;const hit=Object.entries(PRESETS).find(([k,v])=>v[1]&&v[1].slice().sort().join()===sel);f.level.value=hit?hit[0]:'custom'}));
+  f.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(f);const isNew=UEDIT==='new';const old=isNew?null:DB.users.find(x=>x.id===UEDIT);
+    const name=fd.get('name').trim(),email=fd.get('email').trim().toLowerCase(),username=fd.get('username').trim().toLowerCase().replace(/ +/g,'.'),mobile=fd.get('mobile').trim(),pw=fd.get('password')||'';
+    if(!name){toast('Add the full name');return} if(!email&&!username&&!mobile){toast('Add a username, e-mail or mobile');return}
+    if(email&&!EMAIL_RE.test(email)){toast('Check the e-mail address');return} if(/@/.test(username)){toast('A username cannot contain @');return}
+    const id=isNew?'u'+Date.now().toString(36):old.id;
+    if(email&&DB.users.some(x=>x.id!==id&&(x.email||'')===email)){toast('This e-mail is already used');return}
+    if(username&&DB.users.some(x=>x.id!==id&&(x.username||'')===username)){toast('This username is already used');return}
+    if(pw&&!PW_OK(pw)){toast('Password: at least 8 characters with letters and numbers');return}
+    if(isNew&&!pw&&!(email&&DB.config.loginOtp)){toast('Give this user a password');return}
+    if(SYNCING){toast('Saving… try again in a second');return}
+    const self=!isNew&&old.id===me().id;
+    const rec={...(old||{}),id,name,username,email,mobile,title:fd.get('title'),entity:(old&&old.entity)||(DB.entities[0]||{}).id||'SFE'};
+    if(!self){rec.role=f.level.value;rec.perms=boxes().filter(y=>y.checked).map(y=>y.value);rec.active=f.querySelector('[name=active]').checked}
+    if(isNew)DB.users.push(rec);else Object.assign(old,rec);
+    SYNCING=true;busy(true);
+    call('sync',diff()).then(d=>{setData(d);return pw?call('setPassword',{id,password:pw}):d}).then(d=>{setData(d);UEDIT=null;render();toast(isNew?'User added':'User saved')})
+      .catch(err=>{toast('Not saved: '+err.message);refresh()}).finally(()=>{SYNCING=false;busy(false)})});
 };
 
 
@@ -1590,6 +1599,7 @@ document.addEventListener('click',e=>{
   if(a==='clear-dec'){delete DB.decisions[VIEW.id];save();render();toast('Decision cleared')}
   if(a==='q-cancel'){QEDIT=null;render()}
   if(a==='load-sample') loadSample();
+  if(a==='uclose'){UEDIT=null;render()}
   if(a==='gen-pw'){const i=t.closest('form').querySelector('[name=password]');i.value=genPw();i.select()}
   if(a==='remove-sample'){if(Date.now()-(t._arm||0)<3000){removeSample()}else{t._arm=Date.now();t.textContent='Click again to remove';setTimeout(()=>{t.textContent='Remove sample data'},3000)}}
 });
@@ -1600,7 +1610,7 @@ document.addEventListener('change',e=>{
 
 function vAccount(){const u=me(),forced=DB.mustChange;
   return `<div class="head"><div><h1>My account</h1><p>${forced?'<b style="color:var(--warn)">You are using a password that HR gave you. We recommend choosing your own.</b>':'Change your password here: 8 or more characters with letters and numbers.'}</p></div></div>
-  <div class="panel"><dl class="kv"><div><dt>Name</dt><dd>${esc(u.name)}</dd></div><div><dt>Role</dt><dd>${u.role==='hr'?'HR Administrator':'Interviewer'}</dd></div><div><dt>User name</dt><dd>${esc(u.username||'—')}</dd></div><div><dt>E-mail</dt><dd>${esc(u.email||'—')}</dd></div><div><dt>Mobile</dt><dd>${esc(u.mobile||'—')}</dd></div></dl>
+  <div class="panel"><dl class="kv"><div><dt>Name</dt><dd>${esc(u.name)}</dd></div><div><dt>Access</dt><dd>${esc(roleLabel(u))}</dd></div><div><dt>User name</dt><dd>${esc(u.username||'—')}</dd></div><div><dt>E-mail</dt><dd>${esc(u.email||'—')}</dd></div><div><dt>Mobile</dt><dd>${esc(u.mobile||'—')}</dd></div></dl>
   <p class="muted" style="margin:10px 0 0;font-size:12.5px">You can sign in with your user name, e-mail, mobile or full name. To change these, ask HR.</p></div>
   <form class="panel" id="accForm" novalidate autocomplete="off"><h2>Change my password</h2><div class="grid g3">
     <label class="field"><span>Current password</span><input type="password" name="current" autocomplete="current-password"></label>
@@ -1623,7 +1633,7 @@ function downloadCv(id,btn){const old=btn.textContent;btn.disabled=true;btn.text
 
 
 function initIfEmpty(){
-  if(role()!=='hr'||DB.questions.length) return;
+  if(!can('settings')||DB.questions.length) return;
   const s=seed();
   if(!DB.positions.length) DB.positions=s.positions;
   if(!DB.entities.length) DB.entities=s.entities;
