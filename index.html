@@ -127,10 +127,10 @@ legend{padding:0 8px;font-family:var(--f-head);font-weight:700;font-size:11.5px;
 
 
 .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
-@media (max-width:640px){.tbl-wrap.stack{display:block!important;height:auto!important;max-height:none!important;overflow:visible;border:0;background:none}.tbl-wrap.stack table{height:auto!important}.tbl-wrap.stack table,.tbl-wrap.stack tbody,.tbl-wrap.stack tr,.tbl-wrap.stack td{display:block;width:100%}
-.tbl-wrap.stack thead{display:none}.tbl-wrap.stack tr{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:10px 12px;margin-bottom:10px}
-.tbl-wrap.stack td{border:0!important;padding:3px 0!important;text-align:left!important}.tbl-wrap.stack td.r{white-space:normal!important;padding-top:8px!important}
-.tbl-wrap.stack td.r .btn{min-height:40px}.tbl-wrap.stack td.r .btn.pri{min-width:130px}.tbl-wrap.stack select,.tbl-wrap.stack input[type=date]{width:100%}}
+@media (max-width:640px){.tbl-wrap.mcards{display:block!important;height:auto!important;max-height:none!important;overflow:visible;border:0;background:none}.tbl-wrap.mcards table{height:auto!important}.tbl-wrap.mcards table,.tbl-wrap.mcards tbody,.tbl-wrap.mcards tr,.tbl-wrap.mcards td{display:block;width:100%}
+.tbl-wrap.mcards thead{display:none}.tbl-wrap.mcards tr{border:1px solid var(--line);border-radius:var(--r);background:var(--surface);padding:10px 12px;margin-bottom:10px}
+.tbl-wrap.mcards td{border:0!important;padding:3px 0!important;text-align:left!important}.tbl-wrap.mcards td.r{white-space:normal!important;padding-top:8px!important}
+.tbl-wrap.mcards td.r .btn{min-height:40px}.tbl-wrap.mcards td.r .btn.pri{min-width:130px}.tbl-wrap.mcards select,.tbl-wrap.mcards input[type=date]{width:100%}}
 table{border-collapse:collapse;width:100%;background:var(--surface)}
 th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-family:var(--f-head);font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--brand-ink);font-weight:700;background:var(--brand);white-space:nowrap}
@@ -402,6 +402,11 @@ th{background:var(--brand)}
   #login .login-card{padding:28px 22px 24px}#login .lg-h{font-size:22px}#login .login-card form{margin-top:22px}#login .lg-ents{margin-top:22px;padding-top:16px}}
 @media (max-width:780px) and (min-width:561px){#login.login{padding:32px 24px;place-items:start center;align-content:start}#login .lg-wrap{width:min(540px,100%);min-height:0;border-radius:20px;box-shadow:0 24px 70px rgba(15,73,137,.16);margin-top:4vh}
   #login .lg-side{padding:24px 28px}#login .login-card{padding:30px 28px 26px}}
+/* live dashboard */
+body.live .shell{grid-template-columns:minmax(0,1fr)}body.live nav.side{display:none}body.live .lock-note{display:none}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#27aa6c;margin-right:6px;box-shadow:0 0 0 3px rgba(39,170,108,.2);animation:livepulse 2s infinite}
+@keyframes livepulse{50%{box-shadow:0 0 0 6px rgba(39,170,108,.05)}}
+.dash-link{display:flex;gap:8px;flex-wrap:wrap}.dash-link input{flex:1;min-width:220px;font-family:var(--f-mono);font-size:12.5px}
 /* dashboard */
 .dash{display:flex;flex-direction:column;gap:18px}
 .dash-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -823,7 +828,7 @@ function call(fn,arg){return new Promise((res,rej)=>{
 function setData(d){DB=d;DB.comp=DB.comp||{};DB.decisions=DB.decisions||{};SNAP=snapOf(d)}
 function busy(on){const b=document.getElementById('syncDot');if(b)b.hidden=!on}
 function save(){
-  if(!SNAP) return;
+  if(!SNAP||LIVE_KEY) return;
   if(SYNCING){AGAIN=true;return}
   const ch=diff(); if(!ch) return;
   SYNCING=true; busy(true);
@@ -948,7 +953,7 @@ function renderNav(){oneNav();
   $('#nav').innerHTML=navFor().map(([k,l])=>k==='_'?`<div class="grp">${l}</div>`:
     `<button type="button" data-nav="${k}" class="${VIEW.name===k?'on':''}">${l}${k==='my'&&pend?`<span class="count">${pend}</span>`:''}</button>`).join('')+`<div class="foot"><img class="saf-logo nav-saf" alt="SAFfly" src="${LOGO_SAF}"><br>Green Sky Capital<br>Private &amp; Confidential</div>`;
 }
-function renderWho(){const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+esc(roleLabel(u))+'</small>'}
+function renderWho(){if(LIVE_KEY)return;const u=me();$('#whoBox').hidden=false;$('#whoName').innerHTML=esc(u.name)+'<small>'+esc(roleLabel(u))+'</small>'}
 function render(){
   if(!VIEW.name||!allowed(VIEW.name)) VIEW={name:navFor()[0][0],id:null,tab:'profile'};
   renderNav(); renderWho();
@@ -1203,7 +1208,7 @@ function tabInterviews(c){
     const tiv=ivs.filter(i=>i.type===type);
     const tev=evs.filter(e=>e.type===type&&e.submittedAt);
     return `<div class="panel"><div class="panel-head"><h2>${type} interview</h2><span class="muted">${tiv.length} scheduled · ${tiv.filter(isDone).length} completed</span></div>
-      ${tiv.length?`<div class="tbl-wrap stack" style="margin-bottom:14px"><table><thead><tr><th>Date</th><th>Interviewer</th><th>Format</th><th>Status</th><th></th></tr></thead><tbody>
+      ${tiv.length?`<div class="tbl-wrap mcards" style="margin-bottom:14px"><table><thead><tr><th>Date</th><th>Interviewer</th><th>Format</th><th>Status</th><th></th></tr></thead><tbody>
       ${tiv.map(i=>`<tr><td>${r==='hr'?`<input type="date" value="${esc(i.date)}" data-ivdate="${i.id}" aria-label="Interview date" style="min-width:140px">`:fdate(i.date)}</td><td>${r==='hr'&&!isDone(i)?`<select data-ivwho="${i.id}" aria-label="Interviewer" style="min-width:160px">${DB.users.filter(x=>x.active!==false||x.id===i.interviewerId).map(x=>`<option value="${x.id}" ${x.id===i.interviewerId?'selected':''}>${esc(x.name)}</option>`).join('')}</select>`:esc(uname(i.interviewerId))}</td><td>${esc(i.format)}</td><td>${isDone(i)?'<span class="pill p-good">Completed</span>':i.date<TODAY?'<span class="pill p-bad">Past due</span>':'<span class="pill p-hr">Scheduled</span>'}</td>
         <td class="r" style="white-space:nowrap">${i.interviewerId===u.id&&!isDone(i)?`<button class="btn pri sm" type="button" data-eval="${i.id}">Evaluate</button> `:''}${r==='hr'&&!isDone(i)?`<button class="btn sm danger" type="button" data-ivcancel="${i.id}">Cancel</button>`:''}</td></tr>`).join('')}
       </tbody></table></div>`:(type==='Technical'&&!hrOk?'<p class="empty">Opens after the candidate passes the HR interview (HR recommendation Hire or Strong hire).</p>':'<p class="empty">No interview scheduled.</p>')}
@@ -1359,6 +1364,11 @@ async function downloadHrPptx(cid){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='HR interview feedback - '+(c.name||c.id).replace(/[^A-Za-z0-9 ._-]/g,'').trim()+'.pptx';
   document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000);
 }
+document.addEventListener('click',e=>{const d=e.target.closest('[data-dash]');if(!d)return;const a=d.dataset.dash;
+  if(a==='copy'){const i=$('#dashUrl');i.select();(navigator.clipboard?navigator.clipboard.writeText(i.value):Promise.reject()).then(()=>toast('Link copied')).catch(()=>{document.execCommand('copy');toast('Link copied')});return}
+  if(a==='off'&&d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Click again to switch off';return}
+  if(a==='new'&&DB.dashKey&&d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Click again: the old link will stop working';return}
+  call('dashLink',a).then(r=>{DB.dashKey=r.key;render();toast(r.key?'Link ready':'Link switched off')}).catch(err=>toast(err.message))});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pptx]');if(b){e.preventDefault();downloadHrPptx(b.dataset.pptx).catch(err=>toast('PowerPoint: '+err.message))}});
 
 let EDIT=null;
@@ -1463,8 +1473,8 @@ function vMy(){
     return `<tr><td>${fdate(i.date)}</td><td><b>${esc(c.name)}</b><div class="mono muted">${c.id}</div></td><td>${esc(c.position)}<div class="muted">${esc(c.level)} · ${esc(ent(c.entity).name)}</div></td><td><span class="tag ${i.type==='HR'?'hr':'tech'}">${i.type}</span></td>
     <td class="r" style="white-space:nowrap"><button class="btn sm" type="button" data-open="${c.id}">Profile</button> ${isDone(i)?scoreChip(evalScore(ev)):`<button class="btn pri sm" type="button" data-eval="${i.id}">${ev?'Continue draft':'Evaluate'}</button>`}</td></tr>`};
   return `<div class="head"><div><h1>My interviews</h1><p>${esc(u.name)}${u.title?' · '+esc(u.title):''}. These are the interviews assigned to you. Open the profile and CV before the interview, then evaluate right after it.</p></div></div>
-  <div class="panel"><h2>To evaluate (${pend.length})</h2>${pend.length?`<div class="tbl-wrap stack"><table><thead><tr><th>Date</th><th>Candidate</th><th>Position</th><th>Type</th><th></th></tr></thead><tbody>${pend.map(row).join('')}</tbody></table></div>`:'<p class="empty">No pending interviews.</p>'}</div>
-  <div class="panel"><h2>Completed (${done.length})</h2>${done.length?`<div class="tbl-wrap stack"><table><thead><tr><th>Date</th><th>Candidate</th><th>Position</th><th>Type</th><th class="r">My score</th></tr></thead><tbody>${done.map(row).join('')}</tbody></table></div>`:'<p class="empty">None yet.</p>'}</div>`;
+  <div class="panel"><h2>To evaluate (${pend.length})</h2>${pend.length?`<div class="tbl-wrap mcards"><table><thead><tr><th>Date</th><th>Candidate</th><th>Position</th><th>Type</th><th></th></tr></thead><tbody>${pend.map(row).join('')}</tbody></table></div>`:'<p class="empty">No pending interviews.</p>'}</div>
+  <div class="panel"><h2>Completed (${done.length})</h2>${done.length?`<div class="tbl-wrap mcards"><table><thead><tr><th>Date</th><th>Candidate</th><th>Position</th><th>Type</th><th class="r">My score</th></tr></thead><tbody>${done.map(row).join('')}</tbody></table></div>`:'<p class="empty">None yet.</p>'}</div>`;
 }
 
 
@@ -1689,10 +1699,17 @@ function userForm(){
   <p class="muted" style="font-size:12.5px;margin:10px 0 0">${self?'You cannot change your own access. Ask another admin. ':''}Everyone can always fill the interviews assigned to them. Give at least one of username, e-mail or mobile, and send the password to the person yourself.</p>
   <div style="margin-top:12px"><button class="btn pri" type="submit">${UEDIT==='new'?'Add user':'Save changes'}</button></div></form>`;
 }
+function dashLinkPanel(){if(!can('users'))return '';const k=DB.dashKey||'',url=k?location.origin+location.pathname+'#live='+k:'';
+  return `<div class="panel"><div class="ph"><h3>Live dashboard link</h3>${k?'<span class="pill p-good">On</span>':'<span class="pill">Off</span>'}</div>
+    <p class="muted" style="margin:0 0 12px">A link that opens the dashboard without signing in and updates itself after every change. It shows numbers and charts only: no names, CVs, notes or salaries. Anyone who has the link can see the numbers, so share it only inside the company.</p>
+    ${k?`<div class="dash-link"><input type="text" readonly value="${esc(url)}" id="dashUrl" aria-label="Live dashboard link"><button class="btn pri" type="button" data-dash="copy">Copy link</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open</a></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" type="button" data-dash="new">Make a new link (the old one stops working)</button><button class="btn sm" type="button" data-dash="off" style="color:var(--bad)">Switch off</button></div>`
+     :`<button class="btn pri" type="button" data-dash="new">Create the link</button>`}</div>`}
 function vUsers(){
   const meId=me().id, keys=Object.keys(PRESETS).filter(k=>k!=='custom');
   return `<div class="head"><div><h1>Users &amp; access</h1><p>Pick an access level for each person, or tick the permissions one by one. Everyone can always fill the interviews assigned to them.</p></div><button class="btn pri" type="button" data-uedit="new">Add user</button></div>
   ${UEDIT?userForm():''}
+  ${dashLinkPanel()}
   <div class="tbl-wrap"><table><thead><tr><th>Full name</th><th>Username</th><th>Access</th><th>Password</th><th>Status</th><th></th></tr></thead><tbody>
   ${DB.users.map(u=>`<tr style="${u.active===false?'opacity:.55':''}"><td><b>${esc(u.name)}</b><div class="muted" style="font-size:12px">${esc(u.title||'')}${u.sample?' · sample user':''}</div></td><td class="mono">${esc(u.username||'—')}</td>
     <td>${esc(roleLabel(u))}<div class="muted" style="font-size:11.5px">${permsOf(u).length?permsOf(u).map(p=>PERMS.find(x=>x[0]===p)[1]).join(' · '):'Assigned interviews only'}</div></td>
@@ -1863,13 +1880,13 @@ function removeSample(){
 const lg={err(m){const b=$('#lgErr');b.hidden=!m;b.textContent=m||''},msg(m){const b=$('#lgMsg');b.hidden=!m;b.textContent=m||''}};
 let LOGIN_OPTS={password:true,otp:true}, LG_MODE='pw';
 function lgMode(m){LG_MODE=m;$('#lgPw').hidden=m!=='pw';$('#lgEmail').hidden=m!=='otp';$('#lgCode').hidden=true;document.querySelectorAll('[data-lgm]').forEach(b=>b.classList.toggle('on',b.dataset.lgm===m));lg.err('');lg.msg('');
-  setTimeout(()=>{const i=m==='pw'?$('#lgPw').id:$('#lgEmail').email;i&&i.focus()},50)}
+  setTimeout(()=>{const a=document.activeElement;if(a&&a!==document.body&&$('#login').contains(a))return;const i=m==='pw'?$('#lgPw').id:$('#lgEmail').email;i&&i.focus()},50)}
 function showLogin(msg){$('#boot').hidden=true;$('#shell').hidden=true;$('#whoBox').hidden=true;$('#login').hidden=false;
   $('#lgTabs').hidden=!(LOGIN_OPTS.password&&LOGIN_OPTS.otp);lgMode(LOGIN_OPTS.password?'pw':'otp');lg.err(msg||'')}
 document.querySelectorAll('[data-lgm]').forEach(b=>b.addEventListener('click',()=>lgMode(b.dataset.lgm)));
 $('#pwEye').addEventListener('click',()=>{const i=$('#lgPwIn'),on=i.type==='password';i.type=on?'text':'password';const b=$('#pwEye');b.setAttribute('aria-pressed',String(on));b.setAttribute('aria-label',on?'Hide password':'Show password');b.title=on?'Hide password':'Show password';b.classList.toggle('on',on);i.focus()});
 $('#lgPw').addEventListener('submit',e=>{e.preventDefault();const f=e.target,id=f.id.value.trim(),pw=f.pw.value;if(!id||!pw){lg.err('Write your user name and password.');return}
-  const b=f.querySelector('button');b.disabled=true;b.textContent='Checking…';lg.err('');
+  const b=f.querySelector('button[type=submit]');b.disabled=true;b.textContent='Checking…';lg.err('');
   gs('passwordLogin',id,pw).then(r=>{if(r.error){lg.err(r.error);f.pw.value='';f.pw.focus();return}f.pw.value='';signedIn(r.token,r.data)})
   .catch(x=>lg.err(x.message)).finally(()=>{b.disabled=false;b.textContent='Sign in'})});
 function signedOut(msg){TOKEN=null;store.set(null);DB=null;SNAP=null;showLogin(msg)}
@@ -1888,7 +1905,19 @@ $('#lgCode').addEventListener('submit',e=>{e.preventDefault();const f=e.target,c
 $('#lgCode').code.addEventListener('input',e=>{e.target.value=e.target.value.replace(/[^0-9]/g,'').slice(0,6);if(e.target.value.length===6)$('#lgCode').requestSubmit()});
 $('#lgBack').addEventListener('click',()=>{lgMode('otp')});
 $('#logoutBtn').addEventListener('click',()=>{const t=TOKEN;signedOut('');if(t)google.script.run.api('logout',t)});
-(function boot(){if(window.__nogs)return;let done=false;setTimeout(()=>{if(!done)window.__bootFail('<b style="color:#b3362c">The server did not answer.</b><br><br>In Apps Script: make sure you ran <b>setup</b>, then <b>Deploy → Manage deployments → ✏️ → Version: New version → Deploy</b>, and open the <b>/exec</b> link again.')},20000);
+const LIVE_KEY=(location.hash.match(/(?:live|dash)=([A-Za-z0-9]{16,})/)||[])[1]||'';
+let LIVE_STAMP='', LIVE_AT='';
+let LIVE_TO='';
+function liveShow(d,stamp){const y=window.scrollY;const n=new Date(),td=new Date(n.getTime()-n.getTimezoneOffset()*6e4).toISOString().slice(0,10);if(!LIVE_TO)LIVE_TO=DF.to;if(DF.to===LIVE_TO){DF.to=td;LIVE_TO=td}setData(d);LIVE_STAMP=stamp;LIVE_AT=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  $('#boot').hidden=true;$('#login').hidden=true;$('#shell').hidden=false;document.body.classList.add('live');VIEW={name:'dashboard',id:null,tab:'profile'};render();window.scrollTo(0,y);
+  $('#whoBox').hidden=false;$('#logoutBtn').hidden=true;$('#whoName').innerHTML='<span class="live-dot"></span>Live dashboard<small>Updated '+LIVE_AT+'</small>'}
+function liveFail(m){$('#boot').hidden=false;$('#shell').hidden=true;$('#login').hidden=true;window.__bootFail('<b style="color:#b3362c">'+esc(m)+'</b>')}
+function liveLoad(){return gs('dashData',LIVE_KEY).then(r=>{if(r.error){liveFail(r.error);return}liveShow(r.data,r.stamp)})}
+function liveStart(){let busyL=false;
+  liveLoad().catch(e=>liveFail(e.message));
+  const tick=()=>{if(busyL||document.hidden)return;busyL=true;gs('dashStamp',LIVE_KEY).then(r=>{if(r.error){liveFail(r.error);return}if(r.stamp!==LIVE_STAMP)return liveLoad()}).catch(()=>{}).finally(()=>{busyL=false})};
+  setInterval(tick,20000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()})}
+(function boot(){if(window.__nogs)return;if(LIVE_KEY){liveStart();return}let done=false;setTimeout(()=>{if(!done)window.__bootFail('<b style="color:#b3362c">The server did not answer.</b><br><br>In Apps Script: make sure you ran <b>setup</b>, then <b>Deploy → Manage deployments → ✏️ → Version: New version → Deploy</b>, and open the <b>/exec</b> link again.')},20000);
   gs('loginOptions').then(o=>{done=true;if(o)LOGIN_OPTS=o}).catch(e=>{done=true;console.error(e)}).then(o=>{if(o)LOGIN_OPTS=o}).catch(()=>{}).finally(()=>{const t=store.get();if(!t){showLogin('');return}TOKEN=t;call('getData').then(d=>signedIn(t,d)).catch(()=>signedOut(''))})})();
 </script>
 </body></html>
