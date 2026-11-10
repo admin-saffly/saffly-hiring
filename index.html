@@ -413,6 +413,10 @@ body.live .shell{grid-template-columns:minmax(0,1fr)}body.live nav.side{display:
 .chip{border:1px solid var(--brand);background:var(--brand-soft);color:var(--brand);border-radius:20px;padding:4px 12px;font-weight:700;font-size:12.5px;cursor:pointer}
 .dash-filters{padding:0 20px}.dash-filters>summary{cursor:pointer;padding:14px 0;font-family:var(--f-head);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}
 .dash-filters[open]{padding-bottom:18px}
+.dash-filters>summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.dash-filters>summary::marker{content:''}.dash-filters>summary::before{content:'▸';font-size:12px;transition:transform .15s}.dash-filters[open]>summary::before{transform:rotate(90deg)}
+.fsum{font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:13.5px;font-weight:700;color:var(--ink);background:var(--brand-soft);padding:3px 10px;border-radius:20px}
+.fhint{margin-left:auto;font-family:var(--f-body);text-transform:none;letter-spacing:0;font-size:12px;font-weight:600;color:var(--muted)}
+@media (max-width:640px){.fhint{display:none}}
 .kps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
 .kp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;position:relative;overflow:hidden}
 .kp::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--brand)}
@@ -984,6 +988,11 @@ function gauge(v,label){const r=54,C=Math.PI*r,len=v==null?0:Math.max(0,Math.min
   return `<div class="gauge"><svg viewBox="0 0 132 76" role="img" aria-label="${esc(label)} ${v==null?'no data':f1(v)}"><path d="M12 70 A54 54 0 0 1 120 70" fill="none" stroke="var(--sunk)" stroke-width="12" stroke-linecap="round"/><path d="M12 70 A54 54 0 0 1 120 70" fill="none" stroke="${col}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${len} ${C}"/></svg>
     <b>${v==null?'—':f1(v)}<small> / 5</small></b><span>${esc(label)}</span></div>`}
 const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// "This year so far" for the default period, otherwise "1 Oct – 31 Oct 2026"
+function periodLabel(){const d=x=>{if(!x)return '';const [y,m,dd]=x.split('-');return Number(dd)+' '+MON[Number(m)-1]+' '+y};
+  const now=new Date(),td=new Date(now.getTime()-now.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+  if(DF.from===td.slice(0,4)+'-01-01'&&DF.to===td)return 'This year so far · '+d(DF.from).replace(/ [0-9]{4}$/,'')+' – '+d(DF.to);
+  if(!DF.from&&!DF.to)return 'All dates';return (d(DF.from)||'Start')+' – '+(d(DF.to)||'today')}
 function vDashboard(){
   const all=API.candidates(), view=!!DB.viewOnly||!(can('candidates')||can('manage')||can('decision'));
   const list=all.filter(c=>(!DF.entity||c.entity===DF.entity)&&(!DF.dept||c.dept===DF.dept)&&(!DF.position||c.position===DF.position)&&(!DF.status||status(c)===DF.status)&&(!DF.from||c.registered>=DF.from)&&(!DF.to||c.registered<=DF.to));
@@ -1018,9 +1027,9 @@ function vDashboard(){
       <label class="field"><span>From</span><input type="date" id="df-from" value="${DF.from}"></label>
       <label class="field"><span>To</span><input type="date" id="df-to" value="${DF.to}"></label></div>`;
   return `<div class="dash">
-  <div class="head"><div><div class="eyebrow">Recruitment overview</div><h1>Hiring dashboard</h1><p>${fdate(DF.from)} – ${fdate(DF.to)} · ${list.length} candidate${list.length===1?'':'s'}${chips.length?' · filtered':''}. Click a chart to filter.</p></div>
+  <div class="head"><div><div class="eyebrow">Recruitment overview</div><h1>Hiring dashboard</h1></div>
     <div class="dash-actions">${chips.map(([k,v])=>`<button class="chip" type="button" data-df="${k}" data-dv="${esc(DF[k])}" title="Remove filter">${esc(v)} <span aria-hidden="true">×</span></button>`).join('')}<button class="btn sm" type="button" data-act="df-clear">Reset</button></div></div>
-  <details class="panel dash-filters" ${window.innerWidth>820?'open':''}><summary>Filters</summary>${filters}</details>
+  <details class="panel dash-filters" ${window.innerWidth>820?'open':''}><summary><span>Filters</span><span class="fsum">${periodLabel()}</span><span class="fhint">Tip: click any chart to filter</span></summary>${filters}</details>
   <div class="kps">
     ${kpi('Candidates',list.length,`${st['Hired']} hired · ${st['Not accepted']+st['Not selected']} closed`,'hero')}
     ${kpi('In process',inProc,`${st['HR interview']} HR · ${st['Technical interview']} technical`)}
