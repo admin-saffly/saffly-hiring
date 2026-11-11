@@ -406,6 +406,12 @@ th{background:var(--brand)}
 body.live .shell{grid-template-columns:minmax(0,1fr)}body.live nav.side{display:none}body.live .lock-note{display:none}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#27aa6c;margin-right:6px;box-shadow:0 0 0 3px rgba(39,170,108,.2);animation:livepulse 2s infinite}
 @keyframes livepulse{50%{box-shadow:0 0 0 6px rgba(39,170,108,.05)}}
+.modal{position:fixed;inset:0;z-index:60;background:rgba(8,24,42,.58);display:grid;place-items:center;padding:16px}
+.modal-card{background:var(--surface);color:var(--ink);border-radius:var(--r);padding:22px 24px;max-width:480px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.3);border-top:4px solid var(--warn)}
+.modal-card p{margin:12px 0 20px;font-size:14px;line-height:1.6}
+.modal-act{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.p-nj{background:var(--sky-soft);color:var(--sky)}
+.matrix th{vertical-align:bottom;text-align:center}.matrix th:first-child{text-align:left}.matrix th input[type=text]{width:130px;font-size:12.5px;padding:4px 6px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;text-transform:none;letter-spacing:0;font-weight:700}.matrix th .lv-n{font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;opacity:.8}.matrix td input[type=checkbox]{width:17px;height:17px;cursor:pointer}
 .dash-link{display:flex;gap:8px;flex-wrap:wrap}.dash-link input{flex:1;min-width:220px;font-family:var(--f-mono);font-size:12.5px}
 /* dashboard */
 .dash{display:flex;flex-direction:column;gap:18px}
@@ -591,12 +597,16 @@ const ENGLISH=['Basic','Elementary','Intermediate','Upper-Intermediate','Advance
 const RL=['','Poor','Below expectations','Meets expectations','Strong','Outstanding'];
 const REC4={'Strong hire':{recommended:'Recommended',hire:'Hire',outcome:'Proceed to offer'},'Hire':{recommended:'Recommended',hire:'Hire',outcome:'Proceed to offer'},'Hold':{recommended:'Recommended',hire:'N/A',outcome:'Further interview'},'No hire':{recommended:'Not Recommended',hire:'Not Hire',outcome:'Do not proceed'}};
 const grpOf=(q,type)=>q.levels&&q.levels.length?q.levels.join(' / ')+' level competences':q.position&&q.position!=='All'?'Role-specific questions · '+q.position:'Core '+(type==='HR'?'HR':'technical')+' competences';
-const STATUSES=['New','HR interview','Technical interview','Offer phase','Hired','On hold','Not accepted','Not selected'];
-const DECISIONS=['Interviewing phase','Offer phase','Hired','Open position'];
-const decLabel=x=>x==='Hire'?'Hired':x==='Do not hire'?'Open position':x;
+// Hired – Not Joined: accepted the offer, start date confirmed, not started yet. Hired: has joined. Not Hired: not selected / did not proceed.
+const NJ='Hired – Not Joined', NH='Not Hired';
+const isNotHired=x=>x===NH||x==='Open position'||x==='Do not hire';   // the last two are older names, still read
+const STATUSES=['New','HR interview','Technical interview','Offer phase',NJ,'Hired','On hold','Not accepted',NH];
+const DECISIONS=['Interviewing phase','Offer phase',NJ,'Hired',NH];
+const decLabel=x=>x==='Hire'?'Hired':isNotHired(x)?NH:x;
+const ALLOWANCES=['Project Allowance','Transportation Allowance','Mobile Allowance','Accommodation Allowance'];
 const noticeTxt=n=>n===''||n==null?'—':/^[0-9]+$/.test(String(n))?n+' days':String(n);
 const recCls={'Strong hire':'p-good','Hire':'p-good','Hold':'p-await','No hire':'p-bad'};
-const STATUS_CLS={'New':'p-new','HR interview':'p-hr','Technical interview':'p-tech','Offer phase':'p-await','Hired':'p-hired','On hold':'p-hold','Not accepted':'p-not','Not selected':'p-not','Awaiting decision':'p-await','Not hired':'p-not'};
+const STATUS_CLS={'New':'p-new','HR interview':'p-hr','Technical interview':'p-tech','Offer phase':'p-await','Hired':'p-hired','Hired – Not Joined':'p-nj','On hold':'p-hold','Not accepted':'p-not','Not Hired':'p-not','Not selected':'p-not','Awaiting decision':'p-await','Not hired':'p-not'};
 const COMPS={
   HR:['Communication Skills','Motivation & Career Goals','Values & Cultural Fit','Teamwork & Collaboration','Professionalism & Attitude','English Level','Learning Agility','Openness to Feedback','Problem-Solving','Understanding of the Role','Time Management','Ownership & Accountability','Working Independently','Handling Pressure & Deadlines','Conflict Handling','Career Progression','Mentoring & Knowledge Sharing','Decision Making','Stakeholder Management','Initiative & Improvement','Handling Ambiguity','People Management','Leadership Style','Strategic Thinking','Difficult Conversations','Budget & Resource Planning','Change Management','Accountability for Results','Leadership & People Management'],
   Technical:['Core Technical Knowledge','Hands-on Experience & Tools','Problem-Solving','Troubleshooting & Debugging','Design & Architecture Thinking','Quality & Best Practices','Technical Communication','Learning & Staying Current','Job Knowledge','Technical Expertise','Technical Competencies','Relevant Industry Experience','Leadership & People Management']
@@ -712,15 +722,15 @@ function seed(){
   ];
   const K=(cur,exp,grade,gname,basic,allow,min,mid,ccy)=>({current:cur,expected:exp,grade,gradeName:gname,basic,allowances:allow,gradeMin:min,gradeMid:mid,currency:ccy,payments:12,gradeReason:''});
   const comp={
-    'SFE-2026-0001':Object.assign(K(62000,75000,'G9','Senior Professional',64000,[{name:'Transport allowance',amount:4000},{name:'Site allowance',amount:3000}],58000,72000,'EGP'),{gradeReason:'Senior individual contributor leading a process unit without line management of other engineers.',statutory:'Annual increment as per Egyptian Labour Law.'}),
-    'SFE-2026-0002':K(28000,35000,'G7','Professional',30000,[{name:'Transport allowance',amount:2500}],26000,33000,'EGP'),
-    'SFE-2026-0003':K(45000,55000,'G9','Senior Professional',48000,[{name:'Site allowance',amount:3000}],46000,58000,'EGP'),
-    'SFE-2026-0004':K(14000,18000,'G5','Associate',15000,[{name:'Transport allowance',amount:1500}],13000,17000,'EGP'),
-    'SFE-2026-0005':K(180000,220000,'G14','Director',195000,[{name:'Housing allowance',amount:15000}],180000,230000,'EGP'),
-    'SFE-2026-0008':K(22000,27000,'G7','Professional',23000,[{name:'Transport allowance',amount:1200}],20000,26000,'MAD'),
+    'SFE-2026-0001':Object.assign(K(62000,75000,'G9','Senior Professional',64000,[{name:'Transportation Allowance',amount:4000},{name:'Project Allowance',amount:3000}],58000,72000,'EGP'),{gradeReason:'Senior individual contributor leading a process unit without line management of other engineers.',statutory:'Annual increment as per Egyptian Labour Law.'}),
+    'SFE-2026-0002':K(28000,35000,'G7','Professional',30000,[{name:'Transportation Allowance',amount:2500}],26000,33000,'EGP'),
+    'SFE-2026-0003':K(45000,55000,'G9','Senior Professional',48000,[{name:'Project Allowance',amount:3000}],46000,58000,'EGP'),
+    'SFE-2026-0004':K(14000,18000,'G5','Associate',15000,[{name:'Transportation Allowance',amount:1500}],13000,17000,'EGP'),
+    'SFE-2026-0005':K(180000,220000,'G14','Director',195000,[{name:'Accommodation Allowance',amount:15000}],180000,230000,'EGP'),
+    'SFE-2026-0008':K(22000,27000,'G7','Professional',23000,[{name:'Transportation Allowance',amount:1200}],20000,26000,'MAD'),
     'SFE-2026-0009':K(12000,15000,'G6','Professional',13000,[],11500,14500,'MAD'),
     'SFE-2026-0010':K(18000,23000,'G8','Senior Professional',0,[],17000,22000,'MAD'),
-    'SFE-2026-0011':K(24000,28000,'G9','Senior Professional',22000,[{name:'Housing allowance',amount:5000}],21000,27000,'QAR'),
+    'SFE-2026-0011':K(24000,28000,'G9','Senior Professional',22000,[{name:'Accommodation Allowance',amount:5000}],21000,27000,'QAR'),
     'SFE-2026-0012':K(32000,38000,'G11','Manager',0,[],30000,38000,'QAR'),
     'SFE-2026-0006':K(9000,12000,'G4','Associate',0,[],9000,12000,'EGP'),
     'SFE-2026-0007':K(40000,48000,'G8','Senior Professional',0,[],38000,47000,'EGP')
@@ -768,7 +778,12 @@ function seed(){
   const config={method:'weighted',hrWeight:40,techWeight:60,passMark:3.5,strongMark:4.0,furtherMark:3.0};
   return {entities,depts,positions,users,questions,candidates,comp,interviews,evaluations,decisions,config,currentUser:'u1'};
 }
+// Settings → Technical interview questions. Standard (default): every technical interview gets the same general
+// questions (job title "All", all levels). By job title: the general ones plus those written for the title and level.
+const techSame=()=>!DB||!DB.config||DB.config.techSame!==false;
+const isGeneralQ=q=>q.position==='All'&&!(q.levels||[]).length;
 function applicableQuestions(type,c,questions){
+  if(type==='Technical'&&techSame()) return questions.filter(q=>q.active&&q.type===type&&isGeneralQ(q)).sort((a,b)=>{const ix=q=>{const i=COMPS[type].indexOf(q.comp);return i<0?999:i};return ix(a)-ix(b)});
   return questions.filter(q=>q.active&&q.type===type&&(q.position==='All'||q.position===c.position)&&(!q.levels.length||q.levels.includes(c.level)||(c.level==='Lead'&&q.levels.includes('Senior'))||(c.level==='Entry'&&q.levels.includes('Junior'))))
     .sort((a,b)=>{const ix=q=>{const i=COMPS[type].indexOf(q.comp);return i<0?999:i};return ix(a)-ix(b)});
 }
@@ -829,7 +844,19 @@ function diff(){const out={colls:{}};let any=false;
 function call(fn,arg){return new Promise((res,rej)=>{
   google.script.run.withSuccessHandler(r=>{if(r&&r.error){if(r.auth)signedOut(r.error);rej(new Error(r.error))}else res(r?r.data:null)})
     .withFailureHandler(e=>rej(new Error((e&&e.message)||String(e)))).api(fn,TOKEN,arg)})}
-function setData(d){DB=d;DB.comp=DB.comp||{};DB.decisions=DB.decisions||{};SNAP=snapOf(d)}
+function applyLevels(d){if(!d||!Array.isArray(d.levels))return;Object.keys(PRESETS).forEach(k=>delete PRESETS[k]);d.levels.forEach(l=>PRESETS[l.key]=[l.name,l.perms]);PRESETS.custom=['Custom',null]}
+function setData(d){DB=d;DB.comp=DB.comp||{};DB.decisions=DB.decisions||{};applyLevels(d);SNAP=snapOf(d)}
+// Every record has a revision number (rev) that the server raises at each save. These helpers keep the page in step with it.
+const canonNR=v=>{if(Array.isArray(v))return '['+v.map(canonNR).join(',')+']';if(v&&typeof v==='object')return '{'+Object.keys(v).filter(k=>k!=='rev'&&v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+canonNR(v[k])).join(',')+'}';return JSON.stringify(v===undefined?null:v)};
+function viewKey(db){const o={config:db.config};COLLS.forEach(c=>{const m={};recordsOf(db,c).forEach(r=>m[String(r[KEYF[c]||'id'])]=r);o[c]=m});return canonNR(o)}
+function takeRevs(d){COLLS.forEach(c=>{const k=KEYF[c]||'id',m={};recordsOf(d,c).forEach(r=>m[String(r[k])]=r.rev);
+  if(c==='decisions'||c==='comp')Object.keys(DB[c]||{}).forEach(id=>{if(m[id]!==undefined)DB[c][id].rev=m[id]});
+  else(DB[c]||[]).forEach(r=>{const v=m[String(r[k])];if(v!==undefined)r.rev=v})})}
+// The server gives new candidates their real ID; swap the temporary one everywhere on the page.
+function remapIds(map){if(!map||!DB)return;Object.keys(map).forEach(t=>{const id=map[t];
+  DB.candidates.forEach(c=>{if(c.id===t)c.id=id});DB.interviews.forEach(i=>{if(i.candId===t)i.candId=id});DB.evaluations.forEach(e=>{if(e.candId===t)e.candId=id});
+  ['decisions','comp'].forEach(c=>{if(DB[c][t]){DB[c][id]=DB[c][t];delete DB[c][t]}});
+  if(VIEW.id===t)VIEW.id=id;if(EDIT===t)EDIT=id})}
 function busy(on){const b=document.getElementById('syncDot');if(b)b.hidden=!on}
 function save(){
   if(!SNAP||LIVE_KEY) return;
@@ -837,11 +864,20 @@ function save(){
   const ch=diff(); if(!ch) return;
   SYNCING=true; busy(true);
   call('sync',ch).then(d=>{SYNCING=false;
-    if(AGAIN){AGAIN=false;SNAP=snapOf(d);DB.hiddenTech=d.hiddenTech;DB.doneIvs=d.doneIvs;DB.hrOk=d.hrOk;DB.depts=d.depts;save();return}
-    const before=canon(snapOf(DB));setData(d);busy(false);
-    if(canon(snapOf(DB))!==before||VIEW.name==='settings')render();
+    remapIds(d.idMap);
+    if(AGAIN){AGAIN=false;SNAP=snapOf(d);takeRevs(d);DB.hiddenTech=d.hiddenTech;DB.doneIvs=d.doneIvs;DB.hrOk=d.hrOk;DB.depts=d.depts;save();return}
+    const before=viewKey(DB);setData(d);busy(false);
+    if(viewKey(DB)!==before||VIEW.name==='settings')render();
   }).catch(err=>{SYNCING=false;AGAIN=false;busy(false);toast('Not saved: '+err.message);if(TOKEN)refresh()});
 }
+// Saves now and waits for the server. Gives back the map of temporary → real candidate IDs.
+function syncNow(){const ch=diff();if(!ch)return Promise.resolve({});SYNCING=true;busy(true);
+  return call('sync',ch).then(d=>{const m=d.idMap||{};remapIds(m);setData(d);return m}).finally(()=>{SYNCING=false;busy(false)})}
+function confirmBox(title,msg,okLabel){return new Promise(res=>{const w=document.createElement('div');w.className='modal';
+  w.innerHTML=`<div class="modal-card" role="alertdialog" aria-modal="true" aria-labelledby="mdT" aria-describedby="mdM"><h2 id="mdT">${esc(title)}</h2><p id="mdM">${esc(msg)}</p><div class="modal-act"><button class="btn" type="button" data-m="0">Cancel</button><button class="btn pri" type="button" data-m="1">${esc(okLabel)}</button></div></div>`;
+  const key=e=>{if(e.key==='Escape')close(false)};const close=v=>{document.removeEventListener('keydown',key);w.remove();res(v)};
+  w.addEventListener('click',e=>{if(e.target===w){close(false);return}const b=e.target.closest('[data-m]');if(b)close(b.dataset.m==='1')});
+  document.addEventListener('keydown',key);document.body.appendChild(w);w.querySelector('[data-m="0"]').focus()})}
 function refresh(){return call('getData').then(d=>{setData(d);render()}).catch(e=>toast(e.message))}
 const store={get(){try{return sessionStorage.getItem('sf_t')}catch(e){return null}},set(t){try{t?sessionStorage.setItem('sf_t',t):sessionStorage.removeItem('sf_t')}catch(e){}}};
 
@@ -915,9 +951,10 @@ const isDone=iv=>DB.evaluations.some(e=>e.interviewId===iv.id&&e.submittedAt)||(
 function status(c){
   const d=DB.decisions[c.id];
   if(d&&d.decision&&d.decision!=='Interviewing phase'){
+    if(d.decision===NJ)return NJ;
     if(d.decision==='Hired'||d.decision==='Hire')return 'Hired';
     if(d.decision==='Offer phase')return 'Offer phase';
-    if(d.decision==='Open position'||d.decision==='Do not hire')return 'Not selected';
+    if(isNotHired(d.decision))return NH;
     if(d.decision==='On hold')return 'On hold';
   }
   const ivs=DB.interviews.filter(i=>i.candId===c.id);
@@ -933,13 +970,15 @@ function status(c){
   return 'Offer phase';
 }
 const pill=s=>`<span class="pill ${STATUS_CLS[s]||''}">${esc(s)}</span>`;
+const startOf=cid=>{const d=DB.decisions[cid];return d&&d.startDate&&(d.decision===NJ||d.decision==='Hired'||d.decision==='Hire')?d.startDate:''};
+const startNote=cid=>{const s=startOf(cid);return s?`<div class="muted" style="font-size:12px;white-space:nowrap">Start date ${fdate(s)}</div>`:''};
 const scoreCls=s=>s==null?'':s>=DB.config.passMark?'p-good':'p-bad';
 const scoreChip=s=>s==null?'<span class="muted">—</span>':`<span class="pill ${scoreCls(s)}" style="font-family:var(--f-mono)">${f1(s)}</span>`;
 
 
 let VIEW={name:'',id:null,tab:'profile'};
 function navFor(){const L=[];const u=me();
-  const iv=['hr_interviewer','interviewer','custom'].includes(u.role)||DB.interviews.some(i=>i.interviewerId===u.id);
+  const iv=!['admin','hr','hr_ops','viewer'].includes(u.role)||DB.interviews.some(i=>i.interviewerId===u.id);
   const all=can('candidates')||can('manage')||can('decision');
   if(can('dashboard'))L.push(['dashboard','Dashboard']);
   if(iv)L.push(['my','My interviews']);
@@ -970,7 +1009,7 @@ const after={};
 
 
 let DF={entity:'',dept:'',position:'',status:'',from:TODAY.slice(0,4)+'-01-01',to:TODAY};
-const ST_COL={'New':'#9aabbf','HR interview':'#7fb2e5','Technical interview':'#3d7cc9','Offer phase':'#e3a33b','Hired':'#27aa6c','On hold':'#a98bd0','Not accepted':'#c8483d','Not selected':'#7a8796'};
+const ST_COL={'New':'#9aabbf','HR interview':'#7fb2e5','Technical interview':'#3d7cc9','Offer phase':'#e3a33b','Hired – Not Joined':'#1e9e8f','Hired':'#27aa6c','On hold':'#a98bd0','Not accepted':'#c8483d','Not Hired':'#7a8796'};
 const PAL=['#0f4989','#27aa6c','#3d7cc9','#e3a33b','#1e9e8f','#a98bd0','#c8483d','#7fb2e5','#7a8796'];
 const pct=(v,t)=>t?Math.round(v/t*100):0;
 function donut(items,o={}){const size=o.size||168,th=o.thick||22,r=(size-th)/2,C=2*Math.PI*r,tot=items.reduce((a,x)=>a+x.v,0);let off=0;
@@ -999,13 +1038,13 @@ function vDashboard(){
   const ids=new Set(list.map(c=>c.id));
   const ivs=DB.interviews.filter(i=>ids.has(i.candId)), evs=DB.evaluations.filter(e=>ids.has(e.candId)&&e.submittedAt);
   const st={};STATUSES.forEach(x=>st[x]=0);list.forEach(c=>{const x=status(c);st[x]=(st[x]||0)+1});
-  const inProc=st['New']+st['HR interview']+st['Technical interview'], decided=st['Hired']+st['Not selected']+st['Not accepted'];
+  // Hire rate: only candidates with a final decision, and only people who have really joined count as hires.
+  // "Hired – Not Joined" is left out of both sides until the person joins, so nobody is counted twice.
+  const inProc=st['New']+st['HR interview']+st['Technical interview'], decided=st['Hired']+st[NH];
   const hireRate=decided?Math.round(st['Hired']/decided*100):null;
-  const dDays=list.map(c=>{const d=DB.decisions[c.id];return d&&d.date&&c.registered&&['Hired','Hire','Open position','Do not hire'].includes(d.decision)?(new Date(d.date)-new Date(c.registered))/864e5:null}).filter(x=>x!=null&&x>=0);
-  const avgDays=dDays.length?Math.round(dDays.reduce((a,b)=>a+b,0)/dDays.length):null;
   const hrDoneC=list.filter(c=>evs.some(e=>e.candId===c.id&&e.type==='HR')).length, hrPassC=list.filter(c=>hrPassed(c.id)).length;
-  const tDoneC=list.filter(c=>evs.some(e=>e.candId===c.id&&e.type==='Technical')).length, offC=st['Offer phase']+st['Hired'];
-  const funnel=[['Registered',list.length],['HR interview done',hrDoneC],['Passed HR',hrPassC],['Technical done',tDoneC],['Offer or hired',offC],['Hired',st['Hired']]];
+  const tDoneC=list.filter(c=>evs.some(e=>e.candId===c.id&&e.type==='Technical')).length, offC=st['Offer phase']+st[NJ]+st['Hired'];
+  const funnel=[['Registered',list.length],['HR interview done',hrDoneC],['Passed HR',hrPassC],['Technical done',tDoneC],['Offer or accepted',offC],['Hired · joined',st['Hired']]];
   const months=(()=>{const m={};list.forEach(c=>{const k=(c.registered||'').slice(0,7);if(k)(m[k]=m[k]||{reg:0,hired:0}).reg++});
     list.forEach(c=>{const d=DB.decisions[c.id];if(d&&(d.decision==='Hired'||d.decision==='Hire')){const k=(d.date||c.registered||'').slice(0,7);if(k)(m[k]=m[k]||{reg:0,hired:0}).hired++}});
     return Object.keys(m).sort().slice(-12).map(k=>({label:MON[Number(k.slice(5,7))-1]+(Object.keys(m).some(x=>x.slice(0,4)!==k.slice(0,4))?' '+k.slice(2,4):''),...m[k]}))})();
@@ -1031,11 +1070,11 @@ function vDashboard(){
     <div class="dash-actions">${chips.map(([k,v])=>`<button class="chip" type="button" data-df="${k}" data-dv="${esc(DF[k])}" title="Remove filter">${esc(v)} <span aria-hidden="true">×</span></button>`).join('')}<button class="btn sm" type="button" data-act="df-clear">Reset</button></div></div>
   <details class="panel dash-filters" ${window.innerWidth>820?'open':''}><summary><span>Filters</span><span class="fsum">${periodLabel()}</span><span class="fhint">Tip: click any chart to filter</span></summary>${filters}</details>
   <div class="kps">
-    ${kpi('Candidates',list.length,`${st['Hired']} hired · ${st['Not accepted']+st['Not selected']} closed`,'hero')}
+    ${kpi('Candidates',list.length,`${st['Hired']} hired · ${st['Not accepted']+st[NH]} closed`,'hero')}
     ${kpi('In process',inProc,`${st['HR interview']} HR · ${st['Technical interview']} technical`)}
     ${kpi('Offer phase',st['Offer phase'],'waiting for a final decision','amber')}
-    ${kpi('Hired',st['Hired'],hireRate==null?'no closed candidates yet':`hire rate ${hireRate}%`,'green')}
-    ${kpi('Days to decision',avgDays==null?'—':avgDays,'average, registration to decision')}
+    ${kpi(NJ,st[NJ],'accepted the offer · start date confirmed')}
+    ${kpi('Hired',st['Hired'],hireRate==null?'Hire Rate: After the first final decision':`Hire rate ${hireRate}% · ${st['Hired']} of ${decided} final decisions`,'green')}
   </div>
   <div class="grid dg2">
     <div class="panel"><div class="ph"><h3>Candidates by status</h3></div>${donut(STATUSES.map(x=>({l:x,v:st[x],c:ST_COL[x]||'#7a8796'})),{key:'status',sub:'candidates',label:'Candidates by status'})}</div>
@@ -1081,7 +1120,7 @@ function vCandidates(){
     <label class="field"><span>Status</span><select id="cf-status"><option value="">All</option>${STATUSES.map(s=>`<option ${CF.status===s?'selected':''}>${s}</option>`).join('')}</select></label>
   </div></div>
   <div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Candidate</th><th>Position</th><th>Entity</th><th>Status</th><th>HR result</th><th>Technical result</th></tr></thead><tbody>
-  ${list.map(c=>{const s=candScores(c.id);return `<tr class="click" data-open="${c.id}"><td class="mono">${c.id}</td><td><b>${esc(c.name)}</b><div class="muted">${esc(c.years)} yrs · ${esc(c.employer)}</div></td><td>${esc(c.position)}<div class="muted">${esc(c.level)} · ${esc(c.dept)}</div></td><td>${esc(ent(c.entity).name)}</td><td>${pill(status(c))}</td><td>${recChip(c.id,'HR')}</td><td>${recChip(c.id,'Technical')}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">No candidates match.</td></tr>'}
+  ${list.map(c=>{const s=candScores(c.id);return `<tr class="click" data-open="${c.id}"><td class="mono">${c.id}</td><td><b>${esc(c.name)}</b><div class="muted">${esc(c.years)} yrs · ${esc(c.employer)}</div></td><td>${esc(c.position)}<div class="muted">${esc(c.level)} · ${esc(c.dept)}</div></td><td>${esc(ent(c.entity).name)}</td><td>${pill(status(c))}${startNote(c.id)}</td><td>${recChip(c.id,'HR')}</td><td>${recChip(c.id,'Technical')}</td></tr>`}).join('')||'<tr><td colspan="7" class="empty">No candidates match.</td></tr>'}
   </tbody></table></div>
   <p class="muted" style="margin:0;font-size:12.5px">Each result shows the interviewer's recommendation and the score out of 5. The technical interview opens only after the candidate passes HR.</p>`;
 }
@@ -1111,7 +1150,7 @@ function vCandidate(){
       <div class="meta"><div class="eyebrow">${esc(c.position)} · ${esc(c.level)}</div><h1>${esc(c.name)}</h1>
         <div class="ent-line">${esc(e.name)} · ${esc(e.city&&e.city!==e.country?e.city+', ':'')}${esc(e.country)}</div>
         <p><span class="mono">${c.id}</span> · ${esc(c.dept)}</p></div>
-      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">${pill(status(c))}${(can('manage')||can('decision'))&&DB.evaluations.some(e=>e.candId===c.id&&e.type==='HR'&&e.submittedAt)?`<button class="btn pri sm" type="button" data-pack="${c.id}">HR feedback · PowerPoint</button>`:''}${can('users')&&can('manage')?`<button class="btn sm danger" type="button" data-canddel="${c.id}">Delete candidate</button>`:''}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">${pill(status(c))}${startNote(c.id)}${(can('manage')||can('decision'))&&DB.evaluations.some(e=>e.candId===c.id&&e.type==='HR'&&e.submittedAt)?`<button class="btn pri sm" type="button" data-pack="${c.id}">HR feedback · PowerPoint</button>`:''}${can('users')&&can('manage')?`<button class="btn sm danger" type="button" data-canddel="${c.id}">Delete candidate</button>`:''}</div>
     </div>
     <div class="score-row" style="margin-top:14px">
       <div class="score"><span>HR result</span><b style="font-size:14px">${recChip(c.id,'HR')}</b></div>
@@ -1148,7 +1187,9 @@ function tabComp(c){
   const total=(Number(k.basic)||0)+allowTotal;
   const cr=k.gradeMid&&total?total/k.gradeMid*100:null;
   const inBand=k.gradeMin&&total?total>=k.gradeMin:null;
-  const al=[...(k.allowances||[])];while(al.length<3)al.push({name:'',amount:''});
+  const al=[...(k.allowances||[])];while(al.length<ALLOWANCES.length)al.push({name:'',amount:''});
+  // Names saved before the list existed stay selectable in their own row, marked "earlier entry", so nothing is lost.
+  const alOpts=sel=>`<option value="">Select allowance…</option>${ALLOWANCES.map(x=>`<option ${x===sel?'selected':''}>${x}</option>`).join('')}${sel&&!ALLOWANCES.includes(sel)?`<option value="${esc(sel)}" selected>${esc(sel)} (earlier entry)</option>`:''}`;
   return `<div class="lock-note"><b>🔒</b><span>Confidential · only people with the Salaries permission see this tab.</span></div>
   <form class="panel" id="compForm">
     <div class="panel-head"><h2>Package</h2><span class="tag">${esc(k.currency)} · monthly · gross</span></div>
@@ -1157,12 +1198,12 @@ function tabComp(c){
       <label class="field"><span>Expected package</span><input type="number" min="0" name="expected" value="${esc(k.expected)}" placeholder="What they ask for"></label>
       <label class="field"><span>Offered basic salary</span><input type="number" min="0" name="basic" value="${esc(k.basic)}" placeholder="What we offer"></label>
     </div>
-    <h3 style="margin:18px 0 8px">Allowances <span class="muted" style="font-weight:500;font-size:12.5px">· optional, monthly</span></h3>
-    <div class="grid g3">
-      ${al.map((a,i)=>`<div style="display:flex;gap:6px"><input type="text" name="an${i}" value="${esc(a.name)}" placeholder="e.g. ${['Housing','Transport','Phone'][i]}" aria-label="Allowance ${i+1} name" style="flex:1.3;min-width:0"><input type="number" min="0" name="aa${i}" value="${esc(a.amount)}" placeholder="Amount" aria-label="Allowance ${i+1} amount" style="flex:1;min-width:0"></div>`).join('')}
+    <h3 style="margin:18px 0 8px">Allowances <span class="muted" style="font-weight:500;font-size:12.5px">· optional, monthly · choose from the list</span></h3>
+    <div class="grid g2">
+      ${al.map((a,i)=>`<div style="display:flex;gap:6px"><select name="an${i}" aria-label="Allowance ${i+1}" style="flex:1.6;min-width:0">${alOpts(a.name)}</select><input type="number" min="0" name="aa${i}" value="${esc(a.amount)}" placeholder="Amount" aria-label="Allowance ${i+1} amount" style="flex:1;min-width:0"></div>`).join('')}
     </div>
     <div class="grid g3" style="margin-top:16px">
-      <div class="kpi hero"><span>Total per month</span><b>${money(total,k.currency)}</b><small>basic + allowances</small></div>
+      <div class="kpi hero"><span>Total per month</span><b>${money(total,k.currency)}</b><small>${(k.allowances||[]).length?'basic + '+esc((k.allowances||[]).map(a=>a.name).join(', ')):'basic + allowances'}</small></div>
       <div class="kpi"><span>Total per year</span><b>${money(total*(k.payments||12),k.currency)}</b><small>× ${k.payments||12} payments</small></div>
       <div class="kpi"><span>Offer vs expected</span><b style="color:${k.expected&&total?(total>=k.expected?'var(--good)':'var(--warn)'):'inherit'}">${k.expected&&total?((total/k.expected-1)*100>0?'+':'')+((total/k.expected-1)*100).toFixed(0)+'%':'—'}</b><small>${k.expected&&total?(total>=k.expected?'meets what they ask':'below what they ask'):'fill expected and offer'}</small></div>
     </div>
@@ -1243,7 +1284,7 @@ function resultPanel(c){
   const flags=[]; evs.forEach(e=>e.ratings.forEach(r=>{if(r.rating===1)flags.push(`${uname(e.interviewerId)}: "${r.text}" rated 1`)}));
   const box=(t,sc)=>{const r=recOf(c.id,t);return `<div class="kpi"><span>${t} interview</span><b>${r?`<span class="pill ${recCls[r]}" style="font-size:15px">${r}</span>`:'—'}</b><small>${sc!=null?'Score '+f1(sc)+' out of 5':'Not evaluated yet'}</small></div>`};
   const hrR=recOf(c.id,'HR'), tR=recOf(c.id,'Technical');
-  const st0=status(c);const next=st0==='Hired'?'Hired. The final decision is recorded below.':st0==='Not selected'?'Not selected. The position stays open.':!hrR?'Waiting for the HR interview.':hrR==='No hire'?'Not accepted at the HR interview. The candidate does not go to the technical interview.':hrR==='Hold'?'On hold after the HR interview.':!tR?'Passed the HR interview. Technical interview next.':tR==='No hire'?'Not accepted at the technical interview.':tR==='Hold'?'On hold after the technical interview.':'Passed both interviews. Offer phase.';
+  const st0=status(c);const next=st0==='Hired'?'Hired. The candidate has joined.'+(startOf(c.id)?' Start date '+fdate(startOf(c.id))+'.':''):st0===NJ?'Offer accepted. Start date '+fdate(startOf(c.id))+'. Mark as Hired when the candidate joins.':st0===NH?'Not hired. The final decision is recorded below.':!hrR?'Waiting for the HR interview.':hrR==='No hire'?'Not accepted at the HR interview. The candidate does not go to the technical interview.':hrR==='Hold'?'On hold after the HR interview.':!tR?'Passed the HR interview. Technical interview next.':tR==='No hire'?'Not accepted at the technical interview.':tR==='Hold'?'On hold after the technical interview.':'Passed both interviews. Offer phase.';
   return `<div class="panel result"><div class="panel-head"><h2>Interview result</h2>${pill(status(c))}</div>
     <div class="grid g2">${box('HR',s.hr)}${box('Technical',s.tech)}</div>
     <p class="calc">${next}</p>
@@ -1259,15 +1300,17 @@ function tabDecision(c){
     ${evs.map(e=>`<tr><td>${esc(uname(e.interviewerId))}</td><td><span class="tag ${e.type==='HR'?'hr':'tech'}">${e.type}</span></td><td class="r">${scoreChip(evalScore(e))}</td><td><b>${esc(e.rec4||'—')}</b></td><td class="muted" style="font-size:12.5px">${esc(e.recommended)} · ${esc(e.outcome)}</td></tr>`).join('')||'<tr><td colspan="5" class="empty">No submitted evaluations yet.</td></tr>'}
     </tbody></table></div>
 </div>`+resultPanel(c);
-  if(!can('decision')) return sumBox+`<div class="panel"><h2>Final decision</h2>${d.decision?`<dl class="kv"><div><dt>Decision</dt><dd>${pill(st)}</dd></div><div><dt>Date</dt><dd>${fdate(d.date)}</dd></div><div><dt>Approved by</dt><dd>${esc(d.approvedBy)}</dd></div><div><dt>Notes</dt><dd>${esc(d.notes)}</dd></div></dl>`:'<p class="empty">No final decision recorded yet. HR records it after all interviews.</p>'}</div>`;
+  if(!can('decision')) return sumBox+`<div class="panel"><h2>Final decision</h2>${d.decision?`<dl class="kv"><div><dt>Decision</dt><dd>${pill(st)}</dd></div><div><dt>Date</dt><dd>${fdate(d.date)}</dd></div>${startOf(c.id)?`<div><dt>Start date</dt><dd>${fdate(startOf(c.id))}</dd></div>`:''}<div><dt>Approved by</dt><dd>${esc(d.approvedBy)}</dd></div><div><dt>Notes</dt><dd>${esc(d.notes)}</dd></div></dl>`:'<p class="empty">No final decision recorded yet. HR records it after all interviews.</p>'}</div>`;
   return sumBox+`<form class="panel" id="decForm"><h2>Record final hiring decision</h2>
     <div class="grid g3">
-      <label class="field"><span>Decision <i>*</i></span><select name="decision" required><option value="">Select…</option>${DECISIONS.map(x=>{const cur=d.decision==='Hire'?'Hired':d.decision==='Do not hire'?'Open position':d.decision;return `<option ${cur===x?'selected':''}>${x}</option>`}).join('')}</select></label>
+      <label class="field"><span>Decision <i>*</i></span><select name="decision" required><option value="">Select…</option>${DECISIONS.map(x=>`<option ${decLabel(d.decision)===x?'selected':''}>${x}</option>`).join('')}${d.decision==='On hold'?'<option selected>On hold</option>':''}</select></label>
       <label class="field"><span>Decision date</span><input type="date" name="date" value="${d.date||TODAY}"></label>
       <label class="field"><span>Approved by</span><input type="text" name="approvedBy" value="${esc(d.approvedBy||me().name)}"></label>
+      <label class="field" id="startWrap" hidden><span>Confirmed start date <i id="startReq">*</i></span><input type="date" name="startDate" value="${esc(d.startDate||'')}"></label>
     </div>
+    <p class="muted" style="margin:10px 0 0;font-size:12.5px"><b>${NJ}</b>: accepted the offer and has a confirmed start date, but has not started yet. <b>Hired</b>: has joined and started working. <b>${NH}</b>: not selected, or did not proceed. Only <b>Hired</b> counts in the hire rate.</p>
     <label class="field" style="margin-top:12px"><span>Notes</span><textarea name="notes">${esc(d.notes||'')}</textarea></label>
-    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="submit">Save decision</button>${d.decision?'<button class="btn danger" type="button" data-act="clear-dec">Clear decision</button>':''}</div></form>`;
+    <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" type="submit">Save decision</button>${d.decision===NJ?'<button class="btn" type="button" data-act="mark-joined" style="border-color:var(--green);color:var(--good)">✓ Candidate has joined · mark as Hired</button>':''}${d.decision?'<button class="btn danger" type="button" data-act="clear-dec">Clear decision</button>':''}</div></form>`;
 }
 function tabData(c){
   const r=role(); let compRes;
@@ -1289,7 +1332,11 @@ after.candidate=()=>{
   if(cf){cf.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(cf);const k=DB.comp[VIEW.id]||{currency:ent(API.candidate(VIEW.id).entity).currency};
     ['current','expected','basic','gradeMin','gradeMid','payments'].forEach(f=>k[f]=fd.get(f)===''?'':Number(fd.get(f)));
     ['grade','gradeName','gradeReason','statutory','paymentTerms'].forEach(f=>k[f]=fd.get(f));
-    k.allowances=[0,1,2].map(i=>({name:fd.get('an'+i),amount:Number(fd.get('aa'+i))||0})).filter(a=>a.name);
+    const rows=[...cf.querySelectorAll('select[name^=an]')].map((x,i)=>({name:x.value,amount:Number(fd.get('aa'+i))||0}));
+    if(rows.some(a=>!a.name&&a.amount)){toast('Choose the allowance from the list for each amount');return}
+    const picked=rows.filter(a=>a.name);
+    if(new Set(picked.map(a=>a.name)).size!==picked.length){toast('Each allowance can be chosen once');return}
+    k.allowances=picked;
     DB.comp[VIEW.id]=k;save();render();toast('Package saved')})}
   document.querySelectorAll('[data-ivwho]').forEach(el=>el.addEventListener('change',e=>{const iv=DB.interviews.find(i=>i.id===e.target.dataset.ivwho);if(!iv)return;
     iv.interviewerId=e.target.value;DB.evaluations=DB.evaluations.filter(x=>!(x.interviewId===iv.id&&!x.submittedAt));save();render();toast('Interviewer changed to '+uname(iv.interviewerId)+'. Let them know.')}));
@@ -1303,8 +1350,16 @@ after.candidate=()=>{
     DB.interviews.push({id:'IV'+String(DB.interviews.length+1).padStart(3,'0')+Math.random().toString(36).slice(2,5),candId:VIEW.id,type:fd.get('type'),interviewerId:fd.get('interviewer'),date:fd.get('date'),format:fd.get('format')});
     save();render();toast(fd.get('type')+' interview scheduled with '+uname(fd.get('interviewer')))})}
   const df=$('#decForm');
-  if(df){df.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(df);
-    DB.decisions[VIEW.id]={decision:fd.get('decision'),date:fd.get('date'),approvedBy:fd.get('approvedBy'),notes:fd.get('notes')};save();render();toast('Final decision saved')})}
+  if(df){const sw=$('#startWrap'),showStart=()=>{const v=df.decision.value;sw.hidden=!(v===NJ||v==='Hired');$('#startReq').hidden=v!==NJ};
+    df.decision.addEventListener('change',showStart);showStart();
+    df.addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(df),dec=fd.get('decision'),sd=fd.get('startDate')||'';
+    if(!dec){toast('Choose the decision');return}
+    if(dec===NJ&&!sd){toast('Add the confirmed start date');df.startDate.focus();return}
+    // the same record is updated, so the candidate keeps one status and all the interview history
+    const rec={...(DB.decisions[VIEW.id]||{}),decision:dec,date:fd.get('date'),approvedBy:fd.get('approvedBy'),notes:fd.get('notes')};
+    if(dec===NJ||dec==='Hired'){if(sd)rec.startDate=sd;else delete rec.startDate}else{delete rec.startDate;delete rec.joinedDate}
+    if(dec==='Hired'&&!rec.joinedDate)rec.joinedDate=fd.get('date')||TODAY;if(dec===NJ)delete rec.joinedDate;
+    DB.decisions[VIEW.id]=rec;save();render();toast('Final decision saved')})}
 };
 
 
@@ -1375,9 +1430,11 @@ async function downloadHrPptx(cid){
 }
 document.addEventListener('click',e=>{const d=e.target.closest('[data-dash]');if(!d)return;const a=d.dataset.dash;
   if(a==='copy'){const i=$('#dashUrl');i.select();(navigator.clipboard?navigator.clipboard.writeText(i.value):Promise.reject()).then(()=>toast('Link copied')).catch(()=>{document.execCommand('copy');toast('Link copied')});return}
-  if(a==='off'&&d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Click again to switch off';return}
-  if(a==='new'&&DB.dashKey&&d.dataset.sure!=='1'){d.dataset.sure='1';d.textContent='Click again: the old link will stop working';return}
-  call('dashLink',a).then(r=>{DB.dashKey=r.key;render();toast(r.key?'Link ready':'Link switched off')}).catch(err=>toast(err.message))});
+  const run=()=>call('dashLink',a).then(r=>{DB.dashKey=r.key;render();toast(r.key?(a==='new'?'New link ready · the previous link no longer works':'Link ready'):'Link switched off')}).catch(err=>toast(err.message));
+  // Cancel (button, Esc or a click outside) changes nothing: the current link stays active.
+  if(a==='new'&&DB.dashKey){confirmBox('Generate a new link?','Are you sure you want to generate a new link? The current link will be deactivated immediately, and anyone using it will lose access. Only the new link will remain active.','Generate new link').then(ok=>{if(ok)run()});return}
+  if(a==='off'){confirmBox('Switch off the dashboard link?','The current link will stop working immediately, and anyone using it will lose access until you create a new link.','Switch off').then(ok=>{if(ok)run()});return}
+  run()});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-pptx]');if(b){e.preventDefault();downloadHrPptx(b.dataset.pptx).catch(err=>toast('PowerPoint: '+err.message))}});
 
 let EDIT=null;
@@ -1445,21 +1502,34 @@ after.new=()=>{
     if(errs.length||dup){const b=$('#formErr');b.hidden=false;b.textContent=errs.length?'Complete the required fields: '+errs.join(', ')+'.':`Possible duplicate: ${dup.name} is already registered for ${dup.position} (${dup.id}).`;return}
     const arr=p=>[0,1,2,3,4,5].map(i=>fd.get(p+i)).filter(x=>x&&x.trim());
     const data={name:fd.get('name').trim(),entity:fd.get('entity'),position:fd.get('position').trim(),dept:fd.get('dept').trim(),level:fd.get('level'),years:Number(fd.get('years')),gradYear:fd.get('gradYear')?Number(fd.get('gradYear')):'',employer:fd.get('employer'),english:fd.get('english'),notice:fd.get('notice')===''?'':Number(fd.get('notice')),registered:fd.get('registered')};
-    let id=EDIT;
     data.cvLink=fd.get('cvlink').trim();
-    if(!EDIT){const yr=data.registered.slice(0,4);const pre=data.entity+'-'+yr+'-';const n=Math.max(0,...DB.candidates.filter(x=>x.id.startsWith(pre)).map(x=>Number(x.id.slice(pre.length))||0))+1;id=pre+String(n).padStart(4,'0')}
-    const finish=up=>{
-      if(!DB.positions.some(p=>p.title.toLowerCase()===data.position.toLowerCase()))DB.positions.push({title:data.position,dept:data.dept});
-      if(EDIT){Object.assign(DB.candidates.find(x=>x.id===EDIT),data,up||{})}
-      else DB.candidates.push({id,...data,cv:'(link)',email:'',...(up||{})});
-      const mode=EDIT?'':(fd.get('hrmode')||'later');let ivId=null;
-      if(mode==='now'||mode==='assign'){ivId='IV'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
-        DB.interviews.push({id:ivId,candId:id,type:'HR',interviewerId:mode==='now'?me().id:fd.get('hr_iv'),date:mode==='now'?TODAY:(fd.get('hr_date')||TODAY),format:mode==='now'?'In person':fd.get('hr_format')})}
-      save(); const wasEdit=EDIT; EDIT=null; if(mode==='now')go('evaluate',ivId);else go('candidate',id,mode==='assign'?'interviews':'profile'); toast(wasEdit?'Candidate updated':'Candidate registered as '+id)};
-    if(!file){finish();return}
-    const btn=f.querySelector('button[type=submit]');btn.disabled=true;btn.textContent='Uploading CV…';
-    readB64(file).then(b64=>call('uploadCv',{candId:id,name:file.name,mime:file.type,data:b64})).then(r=>finish({cv:r.name,cvFile:r.id}))
-      .catch(err=>{btn.disabled=false;btn.textContent=EDIT?'Save changes':'Register candidate';const b=$('#formErr');b.hidden=false;b.textContent='CV upload failed: '+err.message});
+    const btn=f.querySelector('button[type=submit]'),showErr=m=>{const b=$('#formErr');b.hidden=false;b.textContent=m};
+    const addPos=()=>{if(!DB.positions.some(p=>p.title.toLowerCase()===data.position.toLowerCase()))DB.positions.push({title:data.position,dept:data.dept})};
+    if(EDIT){const id=EDIT;
+      const finish=up=>{addPos();Object.assign(DB.candidates.find(x=>x.id===id),data,up||{});save();EDIT=null;go('candidate',id);toast('Candidate updated')};
+      if(!file){finish();return}
+      btn.disabled=true;btn.textContent='Uploading CV…';
+      readB64(file).then(b64=>call('uploadCv',{candId:id,name:file.name,mime:file.type,data:b64})).then(r=>finish({cv:r.name,cvFile:r.id}))
+        .catch(err=>{btn.disabled=false;btn.textContent='Save changes';showErr('CV upload failed: '+err.message)});
+      return}
+    // New candidate: saved first under a temporary ID; the server answers with the real Candidate ID.
+    if(SYNCING){showErr('Still saving the previous change. Try again in a second.');return}
+    const tmp='NEW-'+Date.now().toString(36)+Math.random().toString(36).slice(2,6), mode=fd.get('hrmode')||'later', label=btn.textContent;
+    const keepPos=DB.positions.slice();let ivId=null;
+    addPos();DB.candidates.push({id:tmp,...data,cv:data.cvLink?'(link)':'',email:''});
+    if(mode==='now'||mode==='assign'){ivId='IV'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+      DB.interviews.push({id:ivId,candId:tmp,type:'HR',interviewerId:mode==='now'?me().id:fd.get('hr_iv'),date:mode==='now'?TODAY:(fd.get('hr_date')||TODAY),format:mode==='now'?'In person':fd.get('hr_format')})}
+    btn.disabled=true;btn.textContent='Saving…';
+    syncNow().then(m=>{const id=m[tmp]||tmp;
+      const open=msg=>{EDIT=null;if(mode==='now')go('evaluate',ivId);else go('candidate',id,mode==='assign'?'interviews':'profile');toast(msg)};
+      if(!file){open('Candidate registered as '+id);return}
+      btn.textContent='Uploading CV…';
+      return readB64(file).then(b64=>call('uploadCv',{candId:id,name:file.name,mime:file.type,data:b64}))
+        .then(r=>{const c=DB.candidates.find(x=>x.id===id);if(c){c.cv=r.name;c.cvFile=r.id;save()}open('Candidate registered as '+id)},
+              err=>open('Registered as '+id+', but the CV was not uploaded ('+err.message+'). Open Edit on the profile to attach it.'));
+    },err=>{   // nothing was saved: take the temporary rows back and keep the form as it is
+      DB.candidates=DB.candidates.filter(x=>x.id!==tmp);DB.interviews=DB.interviews.filter(x=>x.candId!==tmp);DB.positions=keepPos;
+      btn.disabled=false;btn.textContent=label;showErr('Not saved: '+err.message)});
   });
 };
 
@@ -1501,7 +1571,7 @@ function vEvaluate(){
   <form id="evalForm" class="eval-layout" novalidate>
     <div class="grid" style="gap:18px">
       <div class="panel"><dl class="kv"><div><dt>Interviewer</dt><dd>${esc(u.name)}</dd></div><div><dt>Job title</dt><dd>${esc(u.title||'—')}</dd></div><div><dt>Interview date</dt><dd>${fdate(iv.date)}</dd></div><div><dt>Format</dt><dd>${esc(iv.format)}</dd></div></dl>
-        <p class="muted" style="margin:12px 0 0;font-size:12.5px">${qs.length} questions loaded from the question bank for <b>${iv.type} · ${esc(c.position)} · ${esc(c.level)}</b>. Rating scale: 1 Poor · 2 Below expectations · 3 Meets expectations · 4 Strong · 5 Outstanding.</p></div>
+        <p class="muted" style="margin:12px 0 0;font-size:12.5px">${iv.type==='Technical'&&techSame()?`${qs.length} standard technical questions, the same for every job title and level.`:`${qs.length} questions loaded from the question bank for <b>${iv.type} · ${esc(c.position)} · ${esc(c.level)}</b>.`} Rating scale: 1 Poor · 2 Below expectations · 3 Meets expectations · 4 Strong · 5 Outstanding.</p></div>
       <details class="panel guide"><summary style="cursor:pointer;font-weight:700;color:var(--brand)">📘 Interview guide · how to run and rate (click to open)</summary><div style="margin-top:14px">
         <div class="grid g2">
           <div><h3 style="border:0;padding:0;margin-bottom:8px">Interview flow · about 45 minutes</h3><ol class="steps">
@@ -1597,6 +1667,7 @@ function vQuestions(){
     <div class="grid g2" style="margin-top:12px"><label class="field"><span>Question</span><textarea name="text" required>${esc(e?e.text:'')}</textarea></label>
     <label class="field"><span>What a good answer includes (one point per line)</span><textarea name="listen">${esc(e?(e.listen||[]).join(NL):'')}</textarea></label></div>
     <div class="field" style="margin-top:12px"><span>Seniority levels</span><div class="choice"><label><input type="checkbox" name="lvall" ${!e||!e.levels.length?'checked':''}> <b>All levels</b></label>${LEVELS.map(l=>`<label><input type="checkbox" name="lv" value="${l}" ${e&&e.levels.includes(l)?'checked':''}> ${l}</label>`).join('')}</div></div>
+    <p class="muted" id="qStdNote" hidden style="margin:10px 0 0;font-size:12.5px">Technical questions are set to <b>Standard</b>: a new technical question is asked in every technical interview, for all job titles and levels. To write questions for one job title or level, switch to "By job title and level" in Scoring &amp; positions.</p>
     <div style="margin-top:12px;display:flex;gap:8px"><button class="btn pri" type="submit">${e?'Save question':'Add question'}</button>${e?'<button class="btn" type="button" data-act="q-cancel">Cancel</button>':''}</div>
   </form>
   <div class="panel"><div class="filters">
@@ -1605,7 +1676,7 @@ function vQuestions(){
     <label class="field"><span>Seniority</span><select id="qf-level"><option value="">Any</option>${LEVELS.map(l=>`<option ${QF.level===l?'selected':''}>${l}</option>`).join('')}</select></label>
   </div></div>
   <div class="tbl-wrap"><table><thead><tr><th>ID</th><th>Type</th><th>Competency</th><th>Question</th><th>Position</th><th>Seniority</th><th>Active</th><th></th></tr></thead><tbody>
-  ${list.map(q=>`<tr style="${q.active?'':'opacity:.5'}"><td class="mono">${q.id}</td><td><span class="tag ${q.type==='HR'?'hr':'tech'}">${q.type}</span></td><td>${esc(q.comp)}</td><td style="min-width:280px">${esc(q.text)}${(q.listen||[]).length?`<div class="muted" style="font-size:12px;margin-top:4px">Listen for: ${q.listen.map(esc).join(' · ')}</div>`:''}</td><td>${esc(q.position)}</td><td>${q.levels.length?esc(q.levels.join(', ')):'All'}</td>
+  ${list.map(q=>`<tr style="${q.active?'':'opacity:.5'}"><td class="mono">${q.id}</td><td><span class="tag ${q.type==='HR'?'hr':'tech'}">${q.type}</span></td><td>${esc(q.comp)}</td><td style="min-width:280px">${esc(q.text)}${(q.listen||[]).length?`<div class="muted" style="font-size:12px;margin-top:4px">Listen for: ${q.listen.map(esc).join(' · ')}</div>`:''}</td><td>${esc(q.position)}${q.type==='Technical'&&techSame()&&!isGeneralQ(q)?'<div><span class="pill p-hold" title="Technical questions are set to Standard in Scoring & positions, so questions written for one job title or level are not asked.">Not asked · standard mode</span></div>':''}</td><td>${q.levels.length?esc(q.levels.join(', ')):'All'}</td>
     <td><input type="checkbox" aria-label="Active" data-qtoggle="${q.id}" ${q.active?'checked':''}></td><td><button class="btn sm" type="button" data-qedit="${q.id}">Edit</button></td></tr>`).join('')}
   </tbody></table></div>`;
 }
@@ -1613,13 +1684,17 @@ after.questions=()=>{
   const e=QEDIT?DB.questions.find(q=>q.id===QEDIT):null;
   const fillComp=()=>{const t=$('#qType').value;const list=[...new Set(COMPS[t].concat(DB.questions.filter(q=>q.type===t).map(q=>q.comp)))].filter(Boolean);
     $('#qComp').innerHTML=list.map(c=>`<option value="${esc(c)}">`).join('');const inp=$('#qCompIn');if(e&&!inp.value)inp.value=e.comp};
-  $('#qType').addEventListener('change',fillComp);fillComp();
+  // Standard mode: a new technical question is always general (all job titles, all levels).
+  const qf=$('#qForm'),stdLock=()=>{const on=!e&&$('#qType').value==='Technical'&&techSame();$('#qStdNote').hidden=!on;
+    qf.position.disabled=on;qf.querySelectorAll('[name=lv],[name=lvall]').forEach(x=>x.disabled=on);
+    if(on){qf.position.value='All';qf.querySelectorAll('[name=lv]').forEach(x=>x.checked=false);qf.querySelector('[name=lvall]').checked=true}};
+  $('#qType').addEventListener('change',()=>{fillComp();stdLock()});fillComp();stdLock();
   const lvAll=document.querySelector('[name=lvall]'), lvs=[...document.querySelectorAll('[name=lv]')];
   if(lvAll){lvAll.addEventListener('change',()=>{if(lvAll.checked)lvs.forEach(x=>x.checked=false);else if(!lvs.some(x=>x.checked))lvAll.checked=true});
     lvs.forEach(x=>x.addEventListener('change',()=>{lvAll.checked=!lvs.some(y=>y.checked)}))}
   ['type','position','level'].forEach(k=>$('#qf-'+k).addEventListener('change',ev=>{QF[k]=ev.target.value;render()}));
   $('#qForm').addEventListener('submit',ev=>{ev.preventDefault();const fd=new FormData(ev.target);if(!fd.get('text').trim()){toast('Write the question first');return}
-    const data={type:fd.get('type'),comp:(()=>{const raw=(fd.get('comp')||'').trim()||'General',norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');const all=[...new Set(Object.values(COMPS).flat().concat(DB.questions.map(q=>q.comp)))];return all.find(x=>norm(x)===norm(raw))||raw})(),position:fd.get('position'),weight:Math.max(1,Math.min(5,Number(fd.get('weight'))||1)),text:fd.get('text').trim(),levels:fd.get('lvall')?[]:fd.getAll('lv'),listen:fd.get('listen').split(NL).map(x=>x.trim()).filter(Boolean)};
+    const data={type:fd.get('type'),comp:(()=>{const raw=(fd.get('comp')||'').trim()||'General',norm=x=>x.toLowerCase().replace(/[^a-z0-9]/g,'');const all=[...new Set(Object.values(COMPS).flat().concat(DB.questions.map(q=>q.comp)))];return all.find(x=>norm(x)===norm(raw))||raw})(),position:fd.get('position')||'All',weight:e?(Number(e.weight)||1):2,text:fd.get('text').trim(),levels:ev.target.position.disabled||fd.get('lvall')?[]:fd.getAll('lv'),listen:fd.get('listen').split(NL).map(x=>x.trim()).filter(Boolean)};
     if(e) Object.assign(e,data); else DB.questions.push({id:'Q'+String(DB.questions.length+1).padStart(3,'0'),active:true,...data});
     const msg=e?'Question saved':'Question added'; QEDIT=null; save(); render(); toast(msg)});
 };
@@ -1636,6 +1711,17 @@ function vSettings(){
     </div>
     <div class="lock-note" style="margin-top:12px"><span><b>How it works:</b> each interview gets its own score: the average of its ratings, out of 5. HR and technical results are kept separate: the candidate goes to the technical interview only after passing HR (recommendation Hire or Strong hire). The marks below colour the scores and suggest a recommendation to the interviewer.</span></div>
     <div style="margin-top:12px"><button class="btn pri" type="submit">Save scoring</button></div></form>
+  ${(()=>{const tq=DB.questions.filter(q=>q.type==='Technical'&&q.active),gen=tq.filter(isGeneralQ).length,spec=tq.length-gen,same=techSame();
+    return `<div class="panel"><h2>Technical interview questions</h2>
+    <p class="muted" style="margin:6px 0 12px">Choose which questions a technical interviewer gets. HR interviews are not affected.</p>
+    <div class="choice" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <label><input type="radio" name="techMode" value="same" ${same?'checked':''}> <span><b>Standard</b> · the same ${gen} general question${gen===1?'':'s'} in every technical interview, for all job titles and all seniority levels</span></label>
+      <label><input type="radio" name="techMode" value="byrole" ${same?'':'checked'}> <span><b>By job title and level</b> · the general questions plus the questions written for the candidate's job title and level</span></label>
+    </div>
+    <div class="lock-note" style="margin-top:12px"><span><b>${same?'Standard is on.':'By job title and level is on.'}</b> ${same
+      ?`Every interviewer sees the same ${gen} technical question${gen===1?'':'s'}, so candidates are compared on the same basis.${spec?` ${spec} question${spec===1?' is':'s are'} written for one job title or level: ${spec===1?'it stays':'they stay'} in the Question bank, marked "Not asked", and ${spec===1?'is':'are'} not deleted.`:''}`
+      :`Each technical interview gets the ${gen} general question${gen===1?'':'s'}, plus any of the ${spec} question${spec===1?'':'s'} that match the candidate's job title and level.`}
+      The change applies to interviews that have not been started yet. A draft keeps the questions it was opened with, and submitted evaluations never change.</span></div></div>`})()}
   <div class="panel"><h2>Sign-in methods</h2>
     <p class="muted" style="margin:6px 0 12px">Choose how people sign in. Keep at least one on. Before switching e-mail codes off, set a password for yourself in Users &amp; access.</p>
     <div class="choice" style="flex-direction:column;align-items:flex-start;gap:10px">
@@ -1668,11 +1754,13 @@ function vSettings(){
 }
 after.settings=()=>{
   $('#cfgForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);
-    DB.config={...DB.config,method:fd.get('method'),passMark:Number(fd.get('passMark'))||3.5,strongMark:Number(fd.get('strongMark'))||4,furtherMark:Number(fd.get('furtherMark'))||3};
+    DB.config={...DB.config,passMark:Number(fd.get('passMark'))||3.5,strongMark:Number(fd.get('strongMark'))||4,furtherMark:Number(fd.get('furtherMark'))||3};
     save();render();toast('Scoring saved — all scores recalculated')});
   document.querySelectorAll('[data-ecolor]').forEach(i=>i.addEventListener('change',e=>{ent(e.target.dataset.ecolor).color=e.target.value;save();render();toast('Brand colour updated')}));
   document.querySelectorAll('[data-elogo]').forEach(i=>i.addEventListener('change',e=>{const file=e.target.files[0];if(!file)return;if(file.size>3000000){toast('Use a logo under 3 MB');return}
     smallLogo(file).then(url=>{ent(e.target.dataset.elogo).logo=url;save();render();toast('Logo updated')}).catch(()=>toast('Could not read this image'))}));
+  document.querySelectorAll('[name=techMode]').forEach(i=>i.addEventListener('change',e=>{DB.config={...DB.config,techSame:e.target.value==='same'};save();render();
+    toast(e.target.value==='same'?'Technical questions: standard for every job title and level':'Technical questions: by job title and level')}));
   document.querySelectorAll('[data-login]').forEach(i=>i.addEventListener('change',e=>{const k=e.target.dataset.login;DB.config={...DB.config,[k]:e.target.checked};
     const other=k==='loginOtp'?'loginPassword':'loginOtp';if(!e.target.checked&&DB.config[other]===false){toast('Keep at least one sign-in method on');render();return}
     save();toast((k==='loginOtp'?'E-mail codes ':'Password sign-in ')+(e.target.checked?'switched on':'switched off'))}));
@@ -1710,9 +1798,9 @@ function userForm(){
 }
 function dashLinkPanel(){if(!can('users'))return '';const k=DB.dashKey||'',url=k?location.origin+location.pathname+'#live='+k:'';
   return `<div class="panel"><div class="ph"><h3>Live dashboard link</h3>${k?'<span class="pill p-good">On</span>':'<span class="pill">Off</span>'}</div>
-    <p class="muted" style="margin:0 0 12px">A link that opens the dashboard without signing in and updates itself after every change. It shows numbers and charts only: no names, CVs, notes or salaries. Anyone who has the link can see the numbers, so share it only inside the company.</p>
+    <p class="muted" style="margin:0 0 12px">One permanent link that opens the dashboard without signing in and updates itself after every change. Save it and reuse it: it stays the same until an admin generates a new one. It shows numbers and charts only: no names, CVs, notes or salaries. Anyone who has the link can see the numbers, so share it only inside the company.</p>
     ${k?`<div class="dash-link"><input type="text" readonly value="${esc(url)}" id="dashUrl" aria-label="Live dashboard link"><button class="btn pri" type="button" data-dash="copy">Copy link</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Open</a></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" type="button" data-dash="new">Make a new link (the old one stops working)</button><button class="btn sm" type="button" data-dash="off" style="color:var(--bad)">Switch off</button></div>`
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" type="button" data-dash="new">Generate new link</button><button class="btn sm" type="button" data-dash="off" style="color:var(--bad)">Switch off</button></div>`
      :`<button class="btn pri" type="button" data-dash="new">Create the link</button>`}</div>`}
 function vUsers(){
   const meId=me().id, keys=Object.keys(PRESETS).filter(k=>k!=='custom');
@@ -1725,16 +1813,46 @@ function vUsers(){
     <td>${pwPill(u)}</td><td>${u.active!==false?'<span class="pill p-good">Active</span>':'<span class="pill">Off</span>'}</td>
     <td class="r" style="white-space:nowrap"><button class="btn sm" type="button" data-uedit="${u.id}">Edit</button> ${u.id===meId?'':`<button class="btn sm danger" type="button" data-udel="${u.id}">Delete</button>`}</td></tr>`).join('')}
   </tbody></table></div>
-  <div class="panel"><h2>Access levels</h2><div class="tbl-wrap"><table class="matrix"><thead><tr><th>Permission</th>${keys.map(k=>`<th>${PRESETS[k][0]}</th>`).join('')}</tr></thead><tbody>
-  ${PERMS.map(([p,l,dd])=>`<tr><td><b>${l}</b><div class="muted" style="font-size:12px">${dd}</div></td>${keys.map(k=>PRESETS[k][1].includes(p)?'<td class="yes">✓</td>':'<td class="no">✕</td>').join('')}</tr>`).join('')}
-  <tr><td><b>Fill assigned interviews</b><div class="muted" style="font-size:12px">Only the interviews assigned to them</div></td>${keys.map(()=>'<td class="yes">✓</td>').join('')}</tr>
-  </tbody></table></div><p class="muted" style="margin:10px 0 0;font-size:12.5px">Keep at least two admins, so access never depends on one person.</p></div>`;
+  ${levelsPanel()}`;
+}
+// Access levels: an admin ticks what each level allows, and can add levels. Admin and Dashboard · view only are fixed.
+let LVW=null;
+const lvWork=()=>LVW||(LVW=(DB.levels||[]).map(l=>({...l,perms:l.perms.slice()})));
+function levelsPanel(){
+  const edit=can('users')&&Array.isArray(DB.levels), L=edit?lvWork():Object.keys(PRESETS).filter(k=>k!=='custom').map(k=>({key:k,name:PRESETS[k][0],perms:PRESETS[k][1],builtin:true,locked:true}));
+  const used=k=>k?DB.users.filter(u=>u.role===k).length:0;
+  return `<div class="panel" id="lvPanel"><div class="panel-head"><h2>Access levels</h2><span class="muted" style="font-size:12.5px">${L.length} levels</span></div>
+  ${edit?'<p class="muted" style="margin:6px 0 12px;max-width:85ch">Tick what each level can do, or add your own level. Nothing changes until you press <b>Save access levels</b>; then it applies at once to every user on that level. <b>Admin</b> and <b>Dashboard · view only</b> are fixed, so the system can never be left without an admin.</p>':''}
+  <div class="tbl-wrap"><table class="matrix"><thead><tr><th>Permission</th>${L.map((lv,i)=>`<th>${edit&&!lv.builtin?`<input type="text" value="${esc(lv.name)}" data-lvname="${i}" maxlength="40" aria-label="Level name">`:esc(lv.name)}<div class="lv-n">${lv.locked?'fixed · ':''}${used(lv.key)} user${used(lv.key)===1?'':'s'}</div>${edit&&!lv.builtin?`<button class="btn sm danger" type="button" data-lvdel="${i}" style="margin-top:4px">Remove</button>`:''}</th>`).join('')}</tr></thead><tbody>
+  ${PERMS.map(([p,l,dd])=>`<tr><td><b>${l}</b><div class="muted" style="font-size:12px">${dd}</div></td>${L.map((lv,i)=>edit&&!lv.locked?`<td><input type="checkbox" data-lvp="${i}" value="${p}" ${lv.perms.includes(p)?'checked':''} aria-label="${esc(lv.name)}: ${l}"></td>`:lv.perms.includes(p)?'<td class="yes">✓</td>':'<td class="no">✕</td>').join('')}</tr>`).join('')}
+  <tr><td><b>Fill assigned interviews</b><div class="muted" style="font-size:12px">Only the interviews assigned to them</div></td>${L.map(()=>'<td class="yes">✓</td>').join('')}</tr>
+  </tbody></table></div>
+  ${edit?`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:flex-end"><label class="field" style="flex:0 1 240px"><span>New access level</span><input type="text" id="lvNew" maxlength="40" placeholder="e.g. Hiring manager"></label><button class="btn" type="button" id="lvAdd">Add level</button><span style="flex:1"></span><button class="btn" type="button" id="lvReset">Discard changes</button><button class="btn pri" type="button" id="lvSave">Save access levels</button></div>`:''}
+  <p class="muted" style="margin:10px 0 0;font-size:12.5px">Keep at least two admins, so access never depends on one person.</p></div>`;
+}
+function levelsAfter(){
+  if(!$('#lvSave'))return;const L=lvWork();
+  document.querySelectorAll('[data-lvp]').forEach(x=>x.addEventListener('change',()=>{const lv=L[Number(x.dataset.lvp)];if(!lv||lv.locked)return;lv.perms=PERMS.map(p=>p[0]).filter(p=>p===x.value?x.checked:lv.perms.includes(p))}));
+  document.querySelectorAll('[data-lvname]').forEach(x=>x.addEventListener('input',()=>{const lv=L[Number(x.dataset.lvname)];if(lv&&!lv.builtin)lv.name=x.value}));
+  document.querySelectorAll('[data-lvdel]').forEach(b=>b.addEventListener('click',()=>{const i=Number(b.dataset.lvdel),lv=L[i];if(!lv||lv.builtin)return;
+    const n=lv.key?DB.users.filter(u=>u.role===lv.key).length:0;if(n){toast('"'+lv.name+'" is used by '+n+' user(s). Move them to another level first.');return}
+    L.splice(i,1);render();toast('Level removed · press Save access levels to confirm')}));
+  $('#lvAdd').addEventListener('click',()=>{const nm=$('#lvNew').value.trim();if(!nm){toast('Write a name for the new level');$('#lvNew').focus();return}
+    if(L.some(x=>x.name.toLowerCase()===nm.toLowerCase())){toast('A level with this name already exists');return}
+    L.push({key:'',name:nm,perms:[],builtin:false,locked:false});render();toast('Level added · tick its permissions, then Save access levels')});
+  $('#lvReset').addEventListener('click',()=>{LVW=null;render();toast('Changes discarded')});
+  $('#lvSave').addEventListener('click',()=>{if(SYNCING){toast('Saving… try again in a second');return}
+    if(L.some(x=>!x.builtin&&!x.name.trim())){toast('Give every access level a name');return}
+    const b=$('#lvSave');b.disabled=true;busy(true);
+    call('saveLevels',L.map(x=>({key:x.key,name:x.name.trim(),perms:x.perms}))).then(d=>{LVW=null;setData(d);render();toast('Access levels saved and applied')})
+      .catch(err=>{b.disabled=false;toast('Not saved: '+err.message)}).finally(()=>busy(false))});
 }
 const EMAIL_RE=/^[^ @<>()]+@[^ @<>()]+[.][a-z]{2,}$/i;
 const PW_OK=p=>p&&p.length>=8&&/[A-Za-z]/.test(p)&&/[0-9]/.test(p);
 function genPw(){const a='abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ',d='23456789',r=n=>{const x=new Uint32Array(1);crypto.getRandomValues(x);return x[0]%n};
   let s='';for(let i=0;i<6;i++)s+=a[r(a.length)];for(let i=0;i<3;i++)s+=d[r(d.length)];return s}
 after.users=()=>{
+  levelsAfter();
   document.querySelectorAll('[data-uedit]').forEach(b=>b.addEventListener('click',()=>{UEDIT=b.dataset.uedit;render();window.scrollTo(0,0)}));
   document.querySelectorAll('[data-udel]').forEach(b=>b.addEventListener('click',()=>{const id=b.dataset.udel;
     if(Date.now()-(b._arm||0)>3000){b._arm=Date.now();b.textContent='Click again';setTimeout(()=>{b.textContent='Delete'},3000);return}
@@ -1823,6 +1941,7 @@ document.addEventListener('click',e=>{
   if(a==='df-clear'){DF={entity:'',dept:'',position:'',status:'',from:TODAY.slice(0,4)+'-01-01',to:TODAY};render()}
   if(a==='edit-cand'){EDIT=VIEW.id;go('new')}
   if(a==='cancel-edit'){const id=EDIT;EDIT=null;id?go('candidate',id):go('candidates')}
+  if(a==='mark-joined'){const d=DB.decisions[VIEW.id];if(d&&d.decision===NJ){d.decision='Hired';d.joinedDate=TODAY;save();render();toast('Marked as Hired · start date '+fdate(d.startDate))}}
   if(a==='clear-dec'){delete DB.decisions[VIEW.id];save();render();toast('Decision cleared')}
   if(a==='q-cancel'){QEDIT=null;render()}
   if(a==='load-sample') loadSample();
@@ -1847,7 +1966,7 @@ function vAccount(){const u=me(),forced=DB.mustChange;
 after.account=()=>{$('#accForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target),a=fd.get('pw1'),b=fd.get('pw2');
   if(!PW_OK(a)){toast('Password: at least 8 characters with letters and numbers');return} if(a!==b){toast('The two new passwords are not the same');return}
   const btn=e.target.querySelector('button');btn.disabled=true;busy(true);
-  call('setPassword',{id:me().id,current:fd.get('current'),password:a}).then(d=>{setData(d);VIEW={name:'',id:null,tab:'profile'};render();toast('Your password is saved')})
+  call('setPassword',{id:me().id,current:fd.get('current'),password:a}).then(d=>{setData(d);VIEW={name:'',id:null,tab:'profile'};render();initIfEmpty();toast('Your password is saved')})
   .catch(err=>{toast(err.message);btn.disabled=false}).finally(()=>busy(false))})};
 function readB64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]);r.onerror=rej;r.readAsDataURL(file)})}
 function smallLogo(file){return new Promise((res,rej)=>{const r=new FileReader();r.onerror=rej;r.onload=()=>{const img=new Image();img.onerror=rej;img.onload=()=>{
